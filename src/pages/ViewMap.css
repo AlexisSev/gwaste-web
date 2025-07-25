@@ -324,17 +324,25 @@
 }
 
 .map-container {
-  display: grid;
-  grid-template-columns: 1fr 300px;
-  gap: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
   margin-bottom: 30px;
+  background: #f8f8b0; /* soft yellow */
+  border-radius: 12px;
+  padding: 24px 0 24px 0;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  align-items: center;
 }
 
 .osm-map {
-  height: 500px;
-  border-radius: 8px;
+  width: 96%;
+  height: 420px;
+  border-radius: 10px;
   overflow: hidden;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  margin: 0 auto;
+  background: #fff;
 }
 
 /* Custom marker styles */
@@ -917,4 +925,21 @@
     width: 10px;
     height: 10px;
   }
+} 
+
+.map-overlay-info {
+  position: absolute;
+  top: 60px;
+  right: 16px;
+  z-index: 501;
+  background: rgba(255,255,255,0.85);
+  border-radius: 6px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+  border: 1px solid #bbb;
+  padding: 8px 12px 6px 12px;
+  min-width: 140px;
+  max-width: 220px;
+  font-size: 13px;
+  margin-top: 36px;
+  pointer-events: auto;
 } 

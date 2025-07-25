@@ -1,14 +1,16 @@
 import React from "react";
 import {
+  FaTachometerAlt,
   FaCalendarAlt,
   FaMap,
   FaUserTie,
   FaChartBar,
   FaCog,
+  FaSignOutAlt,
 } from "react-icons/fa";
 import "../App.css";
 
-const Sidebar = ({ onNavigate, currentPage }) => {
+const Sidebar = ({ onNavigate, currentPage, onLogout }) => {
   return (
     <div className="sidebar custom-sidebar">
       <div className="sidebar-logo-section">
@@ -16,8 +18,14 @@ const Sidebar = ({ onNavigate, currentPage }) => {
       </div>
       <div className="sidebar-menu-section">
         <div className="sidebar-menu-group">
-          <span className="sidebar-menu-label">Main</span>
+          {/* <span className="sidebar-menu-label">Main</span> */}
           <ul className="nav-links custom-nav-links">
+            <li
+              onClick={() => onNavigate("Dashboard")}
+              className={currentPage === "Dashboard" ? "active" : ""}
+            >
+              <FaTachometerAlt /> Dashboard
+            </li>
             <li
               onClick={() => onNavigate("Schedule")}
               className={currentPage === "Schedule" ? "active" : ""}
@@ -31,10 +39,10 @@ const Sidebar = ({ onNavigate, currentPage }) => {
               <FaMap /> Map
             </li>
             <li
-              onClick={() => onNavigate("CollectorManagement")}
-              className={currentPage === "CollectorManagement" ? "active" : ""}
+              onClick={() => onNavigate("Collector")}
+              className={currentPage === "Collector" ? "active" : ""}
             >
-              <FaUserTie /> Collector Management
+              <FaUserTie /> Collector
             </li>
             <li
               onClick={() => onNavigate("Reports")}
@@ -48,6 +56,13 @@ const Sidebar = ({ onNavigate, currentPage }) => {
               className={currentPage === "Settings" ? "active" : ""}
             >
               <FaCog /> Settings
+            </li>
+            <li
+              onClick={onLogout}
+              className="logout-link"
+              style={{ color: '#e74c3c', marginTop: '2rem', cursor: 'pointer' }}
+            >
+              <FaSignOutAlt style={{ marginRight: 10 }} /> Logout
             </li>
           </ul>
         </div>

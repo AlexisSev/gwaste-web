@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "../firebase";
+import { FaUser, FaLock, FaFacebookF, FaTwitter, FaLinkedinIn } from 'react-icons/fa';
 import "./Login.css";
 
 const Login = ({ onLogin }) => {
@@ -17,7 +18,6 @@ const Login = ({ onLogin }) => {
       ...prev,
       [name]: value
     }));
-    // Clear error when user starts typing
     if (error) setError("");
   };
 
@@ -25,22 +25,16 @@ const Login = ({ onLogin }) => {
     e.preventDefault();
     setLoading(true);
     setError("");
-
     try {
       const userCredential = await signInWithEmailAndPassword(
         auth,
         credentials.email,
         credentials.password
       );
-      
-      // Successfully logged in
-      console.log("User logged in:", userCredential.user);
-      onLogin(userCredential.user);
-      
+      // Pass displayName if available, else email
+      const user = userCredential.user;
+      onLogin(user.displayName || user.email || "Admin", user.email);
     } catch (error) {
-      console.error("Login error:", error);
-      
-      // Handle specific Firebase auth errors
       switch (error.code) {
         case "auth/user-not-found":
           setError("No account found with this email address.");
@@ -66,59 +60,54 @@ const Login = ({ onLogin }) => {
   };
 
   return (
-    <div className="login-page">
-      <div className="login-container">
-        <div className="login-header">
-          <h1>Admin Login</h1>
-          <p>Enter your credentials to access the admin panel</p>
-        </div>
-        
-        {error && (
-          <div className="error-message">
-            {error}
+    <div className="login-split-bg">
+      <div className="login-bg-centered">
+        <div className="login-card">
+          <h2 className="login-title">Welcome Back Admin!</h2>
+          <p className="login-subtitle">Ready to manage things?</p>
+          {error && <div className="error-message">{error}</div>}
+          <form className="login-form-modern" onSubmit={handleSubmit}>
+            <div className="input-icon-group">
+              <span className="input-icon"><FaUser /></span>
+              <input
+                type="email"
+                name="email"
+                placeholder="awesome@user.com"
+                value={credentials.email}
+                onChange={handleInputChange}
+                required
+                disabled={loading}
+                autoComplete="username"
+              />
+            </div>
+            <div className="input-icon-group">
+              <span className="input-icon"><FaLock /></span>
+              <input
+                type="password"
+                name="password"
+                placeholder="Password"
+                value={credentials.password}
+                onChange={handleInputChange}
+                required
+                disabled={loading}
+                autoComplete="current-password"
+              />
+            </div>
+            <div className="login-form-links">
+              <a href="#" className="forgot-link">Forgot your password?</a>
+            </div>
+            <button type="submit" className="login-btn-modern" disabled={loading}>
+              {loading ? "Logging In..." : "Log In"}
+            </button>
+          </form>
+          {/* <div className="login-bottom-text">
+            Don&apos;t have an account? <a href="#" className="signup-link">Sign up!</a>
           </div>
-        )}
-        
-        <form className="login-form" onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label htmlFor="email">Email</label>
-            <input
-              type="email"
-              id="email"
-              name="email"
-              value={credentials.email}
-              onChange={handleInputChange}
-              placeholder="janedoe@gmail.com"
-              required
-              disabled={loading}
-            />
-          </div>
-          
-          <div className="form-group">
-            <label htmlFor="password">Password</label>
-            <input
-              type="password"
-              id="password"
-              name="password"
-              value={credentials.password}
-              onChange={handleInputChange}
-              placeholder="Enter your password"
-              required
-              disabled={loading}
-            />
-          </div>
-          
-          <button 
-            type="submit" 
-            className={`login-btn ${loading ? 'loading' : ''}`}
-            disabled={loading}
-          >
-            {loading ? "Signing In..." : "Sign In"}
-          </button>
-        </form>
-        
-        <div className="login-footer">
-          <p>Forgot your password? Contact system administrator</p>
+          <div className="login-social-icons">
+            <a href="#" aria-label="Facebook"><FaFacebookF /></a>
+            <a href="#" aria-label="Twitter"><FaTwitter /></a>
+            <a href="#" aria-label="LinkedIn"><FaLinkedinIn /></a>
+          </div> */}
         </div>
       </div>
     </div>

@@ -2,21 +2,18 @@ import React, { useState, useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { db } from "../firebase";
-import { collection, onSnapshot } from "firebase/firestore";
+import { collection, onSnapshot, query, orderBy } from "firebase/firestore";
 import "./ViewMap.css";
 import { fetchORSRoute } from '../utils/ors';
 
-// Truck SVG icon generator for Leaflet
-function getTruckIcon(color) {
+// User SVG icon generator for Leaflet
+function getUserIcon() {
   return L.divIcon({
-    className: 'truck-marker',
+    className: 'user-marker',
     html: `
       <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect x="3" y="13" width="18" height="10" rx="2" fill="${color}" stroke="#222" stroke-width="1.5"/>
-        <rect x="21" y="16" width="7" height="7" rx="1.5" fill="#bbb" stroke="#222" stroke-width="1.5"/>
-        <circle cx="8.5" cy="25.5" r="2.5" fill="#222"/>
-        <circle cx="24.5" cy="25.5" r="2.5" fill="#222"/>
-        <rect x="6" y="15" width="8" height="4" rx="1" fill="#fff"/>
+        <circle cx="16" cy="12" r="7" fill="#007bff" stroke="#fff" stroke-width="2"/>
+        <ellipse cx="16" cy="25" rx="10" ry="5" fill="#007bff" fill-opacity="0.3"/>
       </svg>
     `,
     iconSize: [32, 32],
@@ -32,155 +29,39 @@ L.Icon.Default.mergeOptions({
   shadowUrl: require("leaflet/dist/images/marker-shadow.png"),
 });
 
-// Use state for routeConfig
-const initialRouteConfig = [
-  {
-    route: '1',
-    driver: 'MARIO ALAGASE',
-    crew: ['AGOSTINE ESTRERA JR', 'ROBERTO DEL CARMEN', 'JOEY CANTAY'],
-    areas: ['Bogo City Hall', 'Gairan'],
-    coordinates: [
-      // [11.0517, 123.9866], 
-      // [11.0801, 123.9957]  
-    ],
-    time: '7 AM - 3 PM',
-    type: 'DILI MALATA',
-    frequency: 'DAILY',
-    dayOff: 'SUNDAY',
-    specialCollection: 'MALATA - Every WEDNESDAY',
-    color: '#28a745',
-    status: 'active'
-  }
-];
-
 const ViewMap = () => {
   const [map, setMap] = useState(null);
   const [truckMarkers, setTruckMarkers] = useState({});
   const [routePolylines, setRoutePolylines] = useState({});
-  const [selectedRoute, setSelectedRoute] = useState('1');
-  const [truckPositions, setTruckPositions] = useState({});
-  const [isTracking, setIsTracking] = useState(true); // Start tracking by default
-  const [trackingSpeed, setTrackingSpeed] = useState(0.3);
+  const [selectedRoute, setSelectedRoute] = useState('');
   const [timers, setTimers] = useState({});
   const [showRouteInfo, setShowRouteInfo] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const mapRef = useRef(null);
+  const [userLocation, setUserLocation] = useState(null);
+  const userMarkerRef = useRef(null);
 
   const truckMarkersRef = useRef({}); // Store markers for each truck
   const truckIntervalsRef = useRef({}); // Store intervals for each truck
-  const [routeConfig, setRouteConfig] = useState(initialRouteConfig);
+  const [routeConfig, setRouteConfig] = useState([]);
+  const userTruckRef = useRef(null); // Store user truck marker
+  const userTruckIntervalRef = useRef(null); // Store user truck update interval
 
-  // Route data for truck tracking
-  // Restore original routeConfig with manually defined coordinates
-  // const routeConfig = [
-  //   {
-  //     route: '1',
-  //     driver: 'MARIO ALAGASE',
-  //     crew: ['AGOSTINE ESTRERA JR', 'ROBERTO DEL CARMEN', 'JOEY CANTAY'],
-  //     areas: ['Don Pedro', 'Polambato', 'Cayang', 'Taylayan', 'Cogon'],
-  //     coordinates: [
-  //       [11.046741, 123.979485],
-  //       [11.046892, 123.980312],
-  //       [11.047073, 123.981263],
-  //       [11.047234, 123.982099],
-  //       [11.047495, 123.983393],
-  //       [11.047728, 123.984563],
-  //       [11.048011, 123.985964],
-  //       [11.048234, 123.987099],
-  //       [11.048495, 123.988393],
-  //       [11.048728, 123.989563],
-  //       [11.049011, 123.990964],
-  //       [11.049234, 123.992099],
-  //       [11.049495, 123.993393],
-  //       [11.049728, 123.994563],
-  //       [11.050011, 123.995964],
-  //       [11.050234, 123.997099],
-  //       [11.050495, 123.998393],
-  //       [11.050728, 123.999563],
-  //       [11.051011, 124.000964],
-  //       [11.051234, 124.002099],
-  //       [11.051495, 124.003393],
-  //       [11.051728, 124.004563],
-  //       [11.052011, 124.005964],
-  //       [11.052234, 124.007099],
-  //       [11.052495, 124.008393],
-  //       [11.052728, 124.009563],
-  //       [11.052911, 124.010563],
-  //       [11.053028, 124.022162]
-  //     ],
-  //     time: '7 AM - 3 PM',
-  //     type: 'DILI MALATA',
-  //     frequency: 'DAILY',
-  //     dayOff: 'SUNDAY',
-  //     specialCollection: 'MALATA - Every WEDNESDAY',
-  //     color: '#28a745',
-  //     status: 'active'
-  //   },
-  //   // {
-  //   //   route: '2',
-  //   //   driver: 'REY OWATAN',
-  //   //   crew: ['RICKY FRANCISCO', 'REX DESUYO', 'CARLITO TAMPUS'],
-  //   //   areas: ['Sto. Nino', 'Sudlonon', 'Lourdes', 'Carbon', 'Pandan', 'Bungtod'],
-  //   //   coordinates: [
-  //   //     [11.052262819866998, 124.00965133721215], // Sto. Nino
-  //   //     [11.050621534466746, 124.00990009809608], // Sudlonon
-  //   //     [11.049963160992448, 124.00542195294906], // Lourdes
-  //   //     [11.051302802641793, 124.00562125555486], // Carbon
-  //   //     [11.046641268849118, 124.01250850674441], // Pandan
-  //   //     [11.040530691939745, 124.0069241842869], // Bungtod
-  //   //   ],
-  //   //   time: '7 AM - 3 PM',
-  //   //   type: 'DILI MALATA',
-  //   //   frequency: 'DAILY',
-  //   //   dayOff: 'SUNDAY',
-  //   //   specialCollection: 'MALATA - Every FRIDAY',
-  //   //   color: '#007bff',
-  //   //   status: 'active'
-  //   // },
-  //   // {
-  //   //   route: '3',
-  //   //   driver: 'VICENTE SUBINGSUBING',
-  //   //   crew: ['NOLI DAHUNAN', 'ANTHONY REMULTA', 'DOMINADOR ANTOPINA'],
-  //   //   areas: ['ARAPAL Farm', 'Bungtod (Maharat & Laray)', 'Dakit (Highway & Provincial Rd)', 'Malingin Highway'],
-  //   //   coordinates: [
-  //   //     [11.0570, 123.9920], // ARAPAL Farm
-  //   //     [11.040530691939745, 124.0069241842869], // Bungtod
-  //   //     [11.0580, 123.9930], // Dakit
-  //   //     [11.0585, 123.9935], // Malingin Highway
-  //   //   ],
-  //   //   time: '7 AM - 3 PM',
-  //   //   type: 'DILI MALATA',
-  //   //   frequency: 'DAILY',
-  //   //   dayOff: 'SUNDAY',
-  //   //   specialCollection: 'MALATA - Every TUESDAY',
-  //   //   color: '#ffc107',
-  //   //   status: 'active'
-  //   // },
-  //   // {
-  //   //   route: '4',
-  //   //   driver: 'RICARDO OLIVAR',
-  //   //   crew: ['JOEL URSAL SR', 'RADNE BEDRIJO', 'JERMIN ANDRADE'],
-  //   //   areas: ['A/B Cogon', 'Siocon', 'Odlot', 'Marangong', 'Libertad', 'Guadalupe'],
-  //   //   coordinates: [
-  //   //     [11.0590, 123.9940], // A/B Cogon
-  //   //     [11.031800708684733, 124.03092791554725], // Siocon
-  //   //     [11.0600, 123.9950], // Odlot
-  //   //     [11.0605, 123.9955], // Marangong
-  //   //     [11.0610, 123.9960], // Libertad
-  //   //     [11.0615, 123.9965], // Guadalupe
-  //   //   ],
-  //   //   time: '7 AM - 3 PM',
-  //   //   type: 'DILI MALATA',
-  //   //   frequency: 'DAILY',
-  //   //   dayOff: 'SATURDAY',
-  //   //   specialCollection: 'MALATA - Every MONDAY',
-  //   //   color: '#6f42c1',
-  //   //   status: 'active'
-  //   // }
-  // ];
+  // Listen to Firestore for live route updates
+  useEffect(() => {
+    const q = query(collection(db, "routes"), orderBy("route"));
+    const unsub = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      setRouteConfig(data);
+      // Set default selected route if not set
+      if (data.length > 0 && !selectedRoute) {
+        setSelectedRoute(data[0].route);
+      }
+    });
+    return () => unsub();
+  }, []);
 
-  // Remove all ORS fetching logic and use routeConfig directly in the rest of the code.
-
+  // Initialize map and setup Firestore listeners
   useEffect(() => {
     // Initialize map after component mounts
     const timer = setTimeout(() => {
@@ -194,6 +75,9 @@ const ViewMap = () => {
       Object.values(timers).forEach(timer => {
         if (timer) clearInterval(timer);
       });
+      if (userTruckIntervalRef.current) {
+        clearInterval(userTruckIntervalRef.current);
+      }
       if (map) {
         map.remove();
         setMap(null);
@@ -213,36 +97,127 @@ const ViewMap = () => {
     truckMarkersRef.current = {};
     truckIntervalsRef.current = {};
 
-    // For each route, animate a truck
+    // Remove existing user truck
+    if (userTruckRef.current && map.hasLayer(userTruckRef.current)) {
+      map.removeLayer(userTruckRef.current);
+    }
+    if (userTruckIntervalRef.current) {
+      clearInterval(userTruckIntervalRef.current);
+    }
+
+    // Draw all route polylines
     routeConfig.forEach(route => {
-      if (!route.coordinates || route.coordinates.length < 2) return;
-
-      // Filter out invalid points
-      const validCoords = route.coordinates.filter(
-        pt => Array.isArray(pt) && pt.length === 2 && 
-              typeof pt[0] === 'number' && typeof pt[1] === 'number'
-      );
-      if (validCoords.length < 2) return;
-
-      // Draw the route polyline
-      const polyline = L.polyline(validCoords, { color: route.color, weight: 4, opacity: 0.7 }).addTo(map);
-      map.fitBounds(polyline.getBounds());
-
-      // Place marker at start
-      const marker = L.marker(validCoords[0], {
-        icon: getTruckIcon(route.color)
-      }).addTo(map);
-      truckMarkersRef.current[route.route] = marker;
-      let currentIndex = 0;
-      const interval = setInterval(() => {
-        currentIndex++;
-        if (currentIndex >= route.coordinates.length) {
-          currentIndex = 0; // Loop back to start for continuous simulation
-        }
-        marker.setLatLng(route.coordinates[currentIndex]);
-      }, 1000); // Move every second
-      truckIntervalsRef.current[route.route] = interval;
+      const coords = Array.isArray(route.coordinates) ? route.coordinates : [];
+      if (!coords || coords.length < 2) {
+        console.warn(`Route ${route.route} has invalid or missing coordinates:`, coords);
+        return;
+      }
+      // Convert Geopoint coordinates, arrays, or numbers to [lat, lng] arrays
+      const validCoords = coords
+        .map(pt => {
+          if (!pt) return null;
+          // Geopoint object
+          if (typeof pt === 'object' && pt.latitude !== undefined && pt.longitude !== undefined) {
+            return [pt.latitude, pt.longitude];
+          }
+          // Alternative Geopoint object
+          if (typeof pt === 'object' && pt.lat !== undefined && pt.lng !== undefined) {
+            return [pt.lat, pt.lng];
+          }
+          // Array of numbers
+          if (Array.isArray(pt) && pt.length === 2 && typeof pt[0] === 'number' && typeof pt[1] === 'number') {
+            return pt;
+          }
+          // Flat array of numbers (e.g. [lat, lng] as numbers in the main array)
+          if (typeof pt === 'number' && coords.length === 2 && typeof coords[0] === 'number' && typeof coords[1] === 'number') {
+            return [coords[0], coords[1]];
+          }
+          return null;
+        })
+        .filter(pt => Array.isArray(pt) && pt.length === 2 && typeof pt[0] === 'number' && typeof pt[1] === 'number');
+      if (validCoords.length < 2) {
+        console.warn(`Route ${route.route} does not have at least 2 valid coordinates:`, validCoords);
+        return;
+      }
+      L.polyline(validCoords, { color: route.color || '#007bff', weight: 4, opacity: 0.7 }).addTo(map);
     });
+
+    // Animate truck for selected route only
+    const selected = routeConfig.find(r => r.route === selectedRoute);
+    if (selected) {
+      const coords = Array.isArray(selected.coordinates) ? selected.coordinates : [];
+      if (coords && coords.length >= 2) {
+        const validCoords = coords
+          .map(pt => {
+            if (!pt) return null;
+            if (typeof pt === 'object' && pt.latitude !== undefined && pt.longitude !== undefined) {
+              return [pt.latitude, pt.longitude];
+            }
+            if (typeof pt === 'object' && pt.lat !== undefined && pt.lng !== undefined) {
+              return [pt.lat, pt.lng];
+            }
+            if (Array.isArray(pt) && pt.length === 2 && typeof pt[0] === 'number' && typeof pt[1] === 'number') {
+              return pt;
+            }
+            if (typeof pt === 'number' && coords.length === 2 && typeof coords[0] === 'number' && typeof coords[1] === 'number') {
+              return [coords[0], coords[1]];
+            }
+            return null;
+          })
+          .filter(pt => Array.isArray(pt) && pt.length === 2 && typeof pt[0] === 'number' && typeof pt[1] === 'number');
+        if (validCoords.length >= 2) {
+          // Create a simple truck marker (colored div with emoji)
+          const truckIcon = L.divIcon({
+            className: 'truck-marker',
+            html: `
+              <div style="
+                width: 24px; 
+                height: 24px; 
+                background-color: ${selected.color || '#007bff'}; 
+                border: 2px solid #333; 
+                border-radius: 4px; 
+                display: flex; 
+                align-items: center; 
+                justify-content: center; 
+                color: white; 
+                font-weight: bold; 
+                font-size: 12px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+              ">
+                🚛
+              </div>
+            `,
+            iconSize: [24, 24],
+            iconAnchor: [12, 12]
+          });
+          const marker = L.marker(validCoords[0], { icon: truckIcon }).addTo(map);
+          console.log('TRUCK MARKER CREATED at', validCoords[0]);
+          marker.bindPopup(`
+            <div class="truck-popup">
+              <h4>Route ${selected.route}</h4>
+              <p><strong>Driver:</strong> ${selected.driver || 'Unknown'}</p>
+              <p><strong>Status:</strong> Simulated Truck</p>
+            </div>
+          `);
+          truckMarkersRef.current[selected.route] = marker;
+          // Animate truck along route (loop)
+          let currentIndex = 0;
+          const interval = setInterval(() => {
+            currentIndex++;
+            if (currentIndex >= validCoords.length) {
+              currentIndex = 0;
+            }
+            marker.setLatLng(validCoords[currentIndex]);
+            console.log('TRUCK MOVED to', validCoords[currentIndex]);
+          }, 1000);
+          truckIntervalsRef.current[selected.route] = interval;
+        } else {
+          console.warn('No valid coordinates for truck animation:', validCoords);
+        }
+      } else {
+        console.warn('No coordinates array or not enough points for selected route:', coords);
+      }
+    }
 
     // Cleanup on unmount
     return () => {
@@ -252,23 +227,140 @@ const ViewMap = () => {
       Object.values(truckIntervalsRef.current).forEach(interval => clearInterval(interval));
       truckMarkersRef.current = {};
       truckIntervalsRef.current = {};
+      if (userTruckRef.current && map.hasLayer(userTruckRef.current)) {
+        map.removeLayer(userTruckRef.current);
+      }
+      if (userTruckIntervalRef.current) {
+        clearInterval(userTruckIntervalRef.current);
+      }
     };
     // eslint-disable-next-line
-  }, [map, routeConfig]);
+  }, [map, routeConfig, selectedRoute]);
 
-  // Fetch real-world route from Bogo City Hall to user's current location
+  // Optionally, you can keep the geolocation effect for user location, but don't overwrite routeConfig
   useEffect(() => {
-    navigator.geolocation.getCurrentPosition(async function(position) {
-      const startCoords = [ 123.97938020226853, 11.04648668975812]; // Bogo City Hall [lng, lat]
-      const end = [position.coords.longitude, position.coords.latitude];
-      const routeCoordsResult = await fetchORSRoute([startCoords, end]);
-      const leafletCoords = routeCoordsResult.map(([lng, lat]) => [lat, lng]);
-      setRouteConfig([{
-        ...initialRouteConfig[0],
-        coordinates: leafletCoords
-      }]);
+    navigator.geolocation.getCurrentPosition(function(position) {
+      setUserLocation([position.coords.latitude, position.coords.longitude]);
     });
   }, []);
+
+  // Add user marker to the map
+  useEffect(() => {
+    if (!map || !userLocation) return;
+    // Remove previous user marker if exists
+    if (userMarkerRef.current && map.hasLayer(userMarkerRef.current)) {
+      map.removeLayer(userMarkerRef.current);
+    }
+    // Remove previous user truck if exists
+    if (userTruckRef.current && map.hasLayer(userTruckRef.current)) {
+      map.removeLayer(userTruckRef.current);
+    }
+
+    // Add new user marker
+    const marker = L.marker(userLocation, { icon: getUserIcon() }).addTo(map);
+    marker.bindPopup('<b>Your Location</b>');
+    userMarkerRef.current = marker;
+
+    // Create truck route from Bogo City Hall to user location
+    const createTruckRoute = async () => {
+      try {
+        // Bogo City Hall coordinates [longitude, latitude] for ORS
+        const bogoCityHall = [123.97938020226853, 11.04648668975812];
+        const userCoords = [userLocation[1], userLocation[0]]; // Convert to [lng, lat]
+
+        console.log('Creating route from Bogo City Hall to user location...');
+        
+        // Get the route using ORS
+        const routeCoords = await fetchORSRoute([bogoCityHall, userCoords]);
+        
+        if (routeCoords && routeCoords.length > 0) {
+          // Convert to Leaflet format [lat, lng]
+          const leafletCoords = routeCoords.map(([lng, lat]) => [lat, lng]);
+          
+          // Draw the route polyline
+          const routePolyline = L.polyline(leafletCoords, { 
+            color: '#dc3545', 
+            weight: 4, 
+            opacity: 0.7,
+            dashArray: '10, 5' // Dashed line to distinguish from other routes
+          }).addTo(map);
+          
+          // Add truck at Bogo City Hall
+          // const userTruckIcon = getTruckIcon('#dc3545'); // Red color for user truck
+          // const userTruck = L.marker(leafletCoords[0], { icon: userTruckIcon }).addTo(map);
+          // console.log('Truck created at position:', leafletCoords[0]);
+          // console.log('Truck marker added to map:', userTruck);
+          // userTruck.bindPopup(`
+          //   <div class="truck-popup">
+          //     <h4>Your Truck</h4>
+          //     <p><strong>Status:</strong> En route to your location</p>
+          //     <p><strong>From:</strong> Bogo City Hall</p>
+          //     <p><strong>To:</strong> Your location</p>
+          //   </div>
+          // `);
+          // userTruckRef.current = userTruck;
+          
+          // Animate truck along the route
+          // let currentIndex = 0;
+          // const truckInterval = setInterval(() => {
+          //   currentIndex++;
+          //   console.log(`Moving truck to position ${currentIndex}/${leafletCoords.length}:`, leafletCoords[currentIndex]);
+          //   if (currentIndex >= leafletCoords.length) {
+          //     // Truck reached destination
+          //     console.log('Truck reached destination');
+          //     userTruck.getPopup().setContent(`
+          //       <div class="truck-popup">
+          //         <h4>Your Truck</h4>
+          //         <p><strong>Status:</strong> Arrived at your location</p>
+          //         <p><strong>Position:</strong> ${userLocation[0].toFixed(6)}, ${userLocation[1].toFixed(6)}</p>
+          //       </div>
+          //     `);
+          //     clearInterval(truckInterval);
+          //     return;
+          //   }
+          //   userTruck.setLatLng(leafletCoords[currentIndex]);
+          // }, 1000); // Move every second
+          
+          // userTruckIntervalRef.current = truckInterval;
+          
+          console.log(`Truck route created with ${leafletCoords.length} points`);
+        } else {
+          console.error('Failed to get route from ORS');
+        }
+      } catch (error) {
+        console.error('Error creating truck route:', error);
+        // Fallback: just place truck at user location
+        // const userTruckIcon = getTruckIcon('#dc3545');
+        // const userTruck = L.marker(userLocation, { icon: userTruckIcon }).addTo(map);
+        // userTruck.bindPopup(`
+        //   <div class="truck-popup">
+        //     <h4>Your Truck</h4>
+        //     <p><strong>Status:</strong> At your location</p>
+        //     <p><strong>Position:</strong> ${userLocation[0].toFixed(6)}, ${userLocation[1].toFixed(6)}</p>
+        //   </div>
+        // `);
+        // userTruckRef.current = userTruck;
+      }
+    };
+    
+    // Start creating the truck route
+    createTruckRoute();
+
+    // Optionally, center map on user location
+    // map.setView(userLocation, 15);
+    // Cleanup on unmount or location/map change
+    return () => {
+      if (userMarkerRef.current && map.hasLayer(userMarkerRef.current)) {
+        map.removeLayer(userMarkerRef.current);
+      }
+      if (userTruckRef.current && map.hasLayer(userTruckRef.current)) {
+        map.removeLayer(userTruckRef.current);
+      }
+      if (userTruckIntervalRef.current) {
+        clearInterval(userTruckIntervalRef.current);
+      }
+    };
+  }, [map, userLocation]);
 
   const initializeMap = () => {
     // Check if map container exists
@@ -305,10 +397,10 @@ const ViewMap = () => {
       snapshot.docChanges().forEach((change) => {
         if (change.type === "modified") {
           const truckData = change.doc.data();
-          setTruckPositions(prev => ({
-            ...prev,
-            [truckData.routeId]: [truckData.lat, truckData.lng]
-          }));
+          // setTruckPositions(prev => ({
+          //   ...prev,
+          //   [truckData.routeId]: [truckData.lat, truckData.lng]
+          // }));
         }
       });
     });
@@ -318,7 +410,29 @@ const ViewMap = () => {
 
   const createTruckMarker = (routeId, position) => {
     const marker = L.marker(position, {
-      icon: getTruckIcon(getRouteColor(routeId))
+      icon: L.divIcon({ // Changed from getTruckIcon
+        className: 'truck-marker',
+        html: `
+          <div style="
+            width: 24px; 
+            height: 24px; 
+            background-color: ${getRouteColor(routeId)}; 
+            border: 2px solid #333; 
+            border-radius: 4px; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            color: white; 
+            font-weight: bold; 
+            font-size: 12px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+          ">
+            🚛
+          </div>
+        `,
+        iconSize: [24, 24],
+        iconAnchor: [12, 12]
+      })
     }).addTo(map);
     
     marker.bindPopup(`
@@ -341,68 +455,6 @@ const ViewMap = () => {
     });
   };
 
-  const startTruckTracking = () => {
-    setIsTracking(true);
-    
-    routeConfig.forEach(route => {
-      const routeId = route.route;
-      const coordinates = route.coordinates;
-      
-      // Create polyline for the route
-      const polyline = createRoutePolyline(routeId, coordinates);
-      polyline.addTo(map);
-      setRoutePolylines(prev => ({ ...prev, [routeId]: polyline }));
-      
-      // Create truck marker at first coordinate
-      const initialPosition = coordinates[0];
-      const marker = createTruckMarker(routeId, initialPosition);
-      setTruckMarkers(prev => ({ ...prev, [routeId]: marker }));
-      
-      // Start animation
-      let currentIndex = 0;
-      const timer = setInterval(() => {
-        if (currentIndex < coordinates.length) {
-          marker.setLatLng(coordinates[currentIndex]);
-          setTruckPositions(prev => ({ 
-            ...prev, 
-            [routeId]: coordinates[currentIndex] 
-          }));
-          currentIndex++;
-        } else {
-          currentIndex = 0; // Loop back to start
-        }
-      }, 2000 / trackingSpeed);
-      
-      setTimers(prev => ({ ...prev, [routeId]: timer }));
-    });
-  };
-
-  const stopTruckTracking = () => {
-    setIsTracking(false);
-    
-    // Clear all timers
-    Object.values(timers).forEach(timer => {
-      if (timer) clearInterval(timer);
-    });
-    setTimers({});
-    
-    // Remove truck markers
-    Object.values(truckMarkers).forEach(marker => {
-      if (map && map.hasLayer(marker)) {
-        map.removeLayer(marker);
-      }
-    });
-    setTruckMarkers({});
-    
-    // Remove polylines
-    Object.values(routePolylines).forEach(polyline => {
-      if (map && map.hasLayer(polyline)) {
-        map.removeLayer(polyline);
-      }
-    });
-    setRoutePolylines({});
-  };
-
   const getRouteColor = (routeId) => {
     const route = routeConfig.find(r => r.route === routeId);
     return route ? route.color : '#666';
@@ -410,43 +462,6 @@ const ViewMap = () => {
 
   const getCurrentRoute = (routeId = selectedRoute) => {
     return routeConfig.find(route => route.route === routeId);
-  };
-
-  const getMarkerContent = (status) => {
-    switch (status) {
-      case 'active':
-        return '🟢';
-      case 'pending':
-        return '🟡';
-      case 'completed':
-        return '✅';
-      default:
-        return '⚪';
-    }
-  };
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'active':
-        return '#28a745';
-      case 'pending':
-        return '#ffc107';
-      case 'completed':
-        return '#17a2b8';
-      default:
-        return '#6c757d';
-    }
-  };
-
-  const handleGenerateRoute = () => {
-    addNotification('Route generation feature coming soon!', 'info');
-  };
-
-  const handleRefreshMap = () => {
-    if (map) {
-      map.invalidateSize();
-      addNotification('Map refreshed successfully!', 'success');
-    }
   };
 
   const addNotification = (message, type = 'info') => {
@@ -459,12 +474,20 @@ const ViewMap = () => {
     setNotifications(prev => prev.filter(n => n.id !== id));
   };
 
+  // Helper to get unique routes by route number
+  const uniqueRoutes = Object.values(
+    routeConfig.reduce((acc, route) => {
+      if (!acc[route.route]) acc[route.route] = route;
+      return acc;
+    }, {})
+  );
+
   return (
     <div className="view-map-container">
-      <div className="map-header">
+      {/* <div className="map-header">
         <h2>🚛 Collection Map & Truck Tracking</h2>
         <p>Monitor truck routes in real-time</p>
-      </div>
+      </div> */}
 
       {/* Route Legend */}
       {/* <div className="route-legend">
@@ -500,7 +523,7 @@ const ViewMap = () => {
               onChange={(e) => setSelectedRoute(e.target.value)}
               className="route-selector"
             >
-              {routeConfig.map(route => (
+              {uniqueRoutes.map(route => (
                 <option key={route.route} value={route.route}>
                   Route {route.route} - {route.driver}
                 </option>
@@ -516,86 +539,44 @@ const ViewMap = () => {
             </button>
           </div>
         </div>
-        <div className="map-actions">
-          <button className="action-btn" onClick={handleGenerateRoute}>
-            <span>📊</span> Generate Route
-          </button>
-          <button className="action-btn" onClick={handleRefreshMap}>
-            <span>🔄</span> Refresh Map
-          </button>
-        </div>
+        {/* Removed map-actions (Generate Route, Refresh Map) */}
       </div>
       <div className="map-container" style={{ position: 'relative' }}>
-        <div id="map" className="osm-map"></div>
-        {/* Route Legend overlayed on the map */}
-        <div className="map-overlay-legend">
-          <h4>Route Legend</h4>
-          <div className="legend-items">
-            {routeConfig.map(route => (
-              <div key={route.route} className="legend-item">
-                <div 
-                  className="legend-color" 
-                  style={{ backgroundColor: route.color }}
-                ></div>
-                <span>Route {route.route} - {route.driver}</span>
-              </div>
-            ))}
+        <div id="map" className="osm-map">
+          <div className="map-overlay-legend">
+            <h4>Route Legend</h4>
+            <div className="legend-items">
+              {uniqueRoutes.map(route => (
+                <div key={route.route} className="legend-item">
+                  <div 
+                    className="legend-color" 
+                    style={{ backgroundColor: route.color }}
+                  ></div>
+                  <span>Route {route.route} - {route.driver}</span>
+                </div>
+              ))}
+            </div>
           </div>
+          {showRouteInfo && (
+            <div className="route-info-panel map-overlay-info" style={{marginTop: '50px'}}>
+              <h4 style={{margin: '0 0 6px 0', fontSize: '13px', fontWeight: 600, color: '#222', letterSpacing: '0.5px'}}>Route Information</h4>
+              {getCurrentRoute() && (
+                <div style={{display: 'flex', flexDirection: 'column', gap: '4px'}}>
+                  <div style={{display: 'flex', alignItems: 'center', gap: '7px'}}>
+                    <div className="legend-color" style={{backgroundColor: getCurrentRoute().color}}></div>
+                    <span style={{fontWeight: 600, color: '#222', fontSize: '13px'}}>Route {getCurrentRoute().route} - {getCurrentRoute().driver}</span>
+                  </div>
+                  <div style={{fontSize: '12px', color: '#333', marginTop: '4px'}}>
+                    <div><b>Schedule:</b> {getCurrentRoute().time}</div>
+                    <div><b>Type:</b> {getCurrentRoute().type}</div>
+                    <div><b>Frequency:</b> {getCurrentRoute().frequency}</div>
+                    <div><b>Day Off:</b> {getCurrentRoute().dayOff}</div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
-        {showRouteInfo && (
-          <div className="route-info-panel">
-            <h3>Route Information</h3>
-            {getCurrentRoute() && (
-              <div className="route-details">
-                <div className="route-header" style={{ borderLeftColor: getCurrentRoute().color }}>
-                  <h4>Route {getCurrentRoute().route}</h4>
-                  <span className="driver-name">{getCurrentRoute().driver}</span>
-                </div>
-                <div className="route-stats">
-                  <div className="stat-item">
-                    <span className="stat-label">Schedule:</span>
-                    <span className="stat-value">{getCurrentRoute().time}</span>
-                  </div>
-                  <div className="stat-item">
-                    <span className="stat-label">Type:</span>
-                    <span className="stat-value">{getCurrentRoute().type}</span>
-                  </div>
-                  <div className="stat-item">
-                    <span className="stat-label">Frequency:</span>
-                    <span className="stat-value">{getCurrentRoute().frequency}</span>
-                  </div>
-                  <div className="stat-item">
-                    <span className="stat-label">Day Off:</span>
-                    <span className="stat-value">{getCurrentRoute().dayOff}</span>
-                  </div>
-                </div>
-                <div className="crew-section">
-                  <h5>Crew Members:</h5>
-                  <ul className="crew-list">
-                    {getCurrentRoute().crew.map((member, index) => (
-                      <li key={index}>{member}</li>
-                    ))}
-                  </ul>
-                </div>
-                <div className="areas-section">
-                  <h5>Collection Areas:</h5>
-                  <div className="areas-grid">
-                    {getCurrentRoute().areas.map((area, index) => (
-                      <div key={index} className="area-item">
-                        <span className="area-number">{index + 1}</span>
-                        <span className="area-name">{area}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div className="special-collection">
-                  <h5>Special Collection:</h5>
-                  <p>{getCurrentRoute().specialCollection}</p>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
       </div>
     </div>
   );
