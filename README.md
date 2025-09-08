@@ -1,70 +1,37 @@
-# Getting Started with Create React App
+# 🚛  G-WASTE: A SMART WASTE COLLECTION SYSTEM WITH GPS TECHNOLOGY FOR REAL-TIME TRACKING
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 
-## Available Scripts
+This project aims to develop the **G-Waste** system to help residents, operations managers, and garbage collectors by ensuring timely garbage collection, convenient scheduling, proper waste categorization, and improved communication through real-time notifications.
 
-In the project directory, you can run:
+---
 
-### `npm start`
+1. **Real-time Location Tracking**  
+   Provide real-time tracking of garbage trucks, allowing residents to know when collection services are on the way.  
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+2. **Real-time Notifications**  
+   Offer notifications on actual pick-ups in specific areas to keep residents informed of collection status.  
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+3. **Dynamic Scheduling for Operations Managers**  
+   Allow managers to **create, update, and delete collection schedules**, making temporary adjustments when needed.  
 
-### `npm test`
+4. **AI-powered Predictive Analysis**  
+   Use Artificial Intelligence to analyze waste patterns, volume trends, and operational data, automatically adjusting collection schedules for efficiency.
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+---
 
-### `npm run build`
+## 🛠️ Tech Stack
+- **Frontend (Mobile):** React Native (Expo) + Leaflet (WebView for Maps)  
+- **Backend:** Supabase (Postgres + Row Level Security) & Firebase (Auth + Firestore)  
+- **Storage:** Supabase Storage (for images, reports, and documents)  
+- **AI/ML:** Predictive analysis for waste collection patterns  
+- **Maps & Geolocation:** OpenStreetMap (Leaflet), OSRM (Routing), Expo Location
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+---
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
-
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
-
-### `npm run eject`
-
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
-
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
-
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
-
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+## 📱 Key Features
+- 🚛 **Real-time Truck Tracking** – Residents can see garbage trucks moving on the map.  
+- 🔔 **Push Notifications/SMS** – Notify users when a truck is nearby or a schedule is updated.  
+- 📅 **Dynamic Scheduling** – Managers can add, update, or delete routes in real time.  
+- 🧠 **AI-powered Predictions** – Smarter collection scheduling based on data patterns.  
+- 💬 **Chatbot Support** – Residents can ask for info, get waste management tips, or report issues.  
+- 📸 **Report with Proof** – Residents can upload images when reporting missed pickups or issues.
