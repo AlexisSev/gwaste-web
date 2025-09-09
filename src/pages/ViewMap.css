@@ -1,7 +1,12 @@
 .view-map-container {
-  padding: 20px;
+  padding: 5px;
   max-width: 1400px;
-  margin: 0 auto;
+  margin: 0;
+  height: 85vh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  z-index: 1;
 }
 
 /* Notifications */
@@ -333,16 +338,22 @@
   padding: 24px 0 24px 0;
   box-shadow: 0 2px 8px rgba(0,0,0,0.06);
   align-items: center;
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  z-index: 1;
 }
 
 .osm-map {
   width: 96%;
-  height: 420px;
+  height: 85vh;
   border-radius: 10px;
   overflow: hidden;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
   margin: 0 auto;
   background: #fff;
+  flex: 1;
+  min-height: 0;
 }
 
 /* Custom marker styles */
@@ -827,7 +838,7 @@
   }
   
   .osm-map {
-    height: 400px;
+    height: 70vh;
   }
   
   .map-stats {

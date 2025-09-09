@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { db } from "../firebase";
 import {
   collection,
@@ -12,9 +12,11 @@ import {
   where,
   deleteDoc as deleteFirestoreDoc,
 } from "firebase/firestore";
+import { FaCamera, FaEdit, FaEye, FaEyeSlash } from 'react-icons/fa';
 import "./Collector.css";
 
 // Helper to remove all routes for a driver
+// eslint-disable-next-line no-unused-vars
 async function removeRoutesForDriver(driverName) {
   const routesRef = collection(db, "routes");
   const q = query(routesRef, where("driver", "==", driverName));
@@ -36,14 +38,19 @@ const Collector = () => {
     collector: null,
   });
   const [editModal, setEditModal] = useState({ open: false, collector: null });
+  const [showPassword, setShowPassword] = useState(false);
   const [form, setForm] = useState({
     firstName: "",
     lastName: "",
     contact: "",
+    password: "",
     crew: [{ firstName: "", lastName: "" }],
   });
   const [formErrors, setFormErrors] = useState({});
   const [successModalOpen, setSuccessModalOpen] = useState(false);
+  const [addLoading, setAddLoading] = useState(false);
+  const [editSuccessModalOpen, setEditSuccessModalOpen] = useState(false);
+  const fileInputRef = useRef(null);
 
   // Load collectors from Firestore
   useEffect(() => {
@@ -55,7 +62,7 @@ const Collector = () => {
     return () => unsub();
   }, []);
 
-  const filteredCollectors = collectors.filter(
+  const filteredCollectors = (collectors || []).filter(
     (collector) =>
       collector.status === activeTab &&
       (collector.driver?.toLowerCase().includes(search.toLowerCase()) ||
@@ -63,17 +70,17 @@ const Collector = () => {
   );
 
   // Only show drivers in the main grid
-  const drivers = filteredCollectors.filter((c) => c.driver);
+  const drivers = (filteredCollectors || []).filter((c) => c.driver);
 
   // Add Collector Modal logic
   const openAddModal = () => {
-    setForm({ firstName: "", lastName: "", contact: "", crew: [{ firstName: "", lastName: "" }] });
+    setForm({ firstName: "", lastName: "", contact: "", password: "", crew: [{ firstName: "", lastName: "" }] });
     setFormErrors({});
     setAddModalOpen(true);
   };
   const closeAddModal = () => {
     setAddModalOpen(false);
-    setForm({ firstName: "", lastName: "", contact: "", crew: [{ firstName: "", lastName: "" }] });
+    setForm({ firstName: "", lastName: "", contact: "", password: "", crew: [{ firstName: "", lastName: "" }] });
     setFormErrors({});
   };
   const handleFormChange = (e) => {
@@ -102,30 +109,88 @@ const Collector = () => {
     if (!form.firstName) errors.firstName = "First name required";
     if (!form.lastName) errors.lastName = "Last name required";
     if (!form.contact) errors.contact = "Contact number required";
-    if (!form.crew.filter((c) => c.firstName.trim() && c.lastName.trim()).length)
-      errors.crew = "At least one crew member with first and last name";
+    if (!form.password) errors.password = "Password required";
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
   const handleAddCollector = async (e) => {
     e.preventDefault();
-    if (!validate()) return;
-    // Check for duplicate driver name (case-insensitive)
+    if (addLoading) return;
+    setAddLoading(true);
+    if (!validate()) { setAddLoading(false); return; }
+    
     try {
-      const q = query(
-        collection(db, "collectors"),
-        where("driver", "==", form.firstName + ' ' + form.lastName)
-      );
-      const snapshot = await getDocs(q);
-      const duplicate = snapshot.docs.find(docSnap => docSnap.data().driver?.toLowerCase() === (form.firstName + ' ' + form.lastName).toLowerCase());
-      if (duplicate) {
-        setFormErrors({ driver: "A collector with this driver name already exists." });
+      // Fetch the latest collectors from Firestore for duplicate check
+      const snapshot = await getDocs(query(collection(db, "collectors")));
+      const latestCollectors = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      
+      // Fetch all routes to check crew assignments
+      const routesSnapshot = await getDocs(query(collection(db, "routes")));
+      const allRoutes = routesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      
+      // Gather all existing driver and crew names (case-insensitive)
+      const allNames = latestCollectors.flatMap(c => [
+        (c.driver || '').toLowerCase(),
+        ...(c.crew || []).map(member =>
+          (member.firstName && member.lastName)
+            ? (member.firstName + ' ' + member.lastName).toLowerCase()
+            : ''
+        )
+      ]).filter(Boolean);
+      
+      // New driver name
+      const newDriverName = (form.firstName + ' ' + form.lastName).toLowerCase();
+      
+      // New crew names
+      const newCrewNames = form.crew
+        .filter(c => c.firstName.trim() && c.lastName.trim())
+        .map(c => (c.firstName + ' ' + c.lastName).toLowerCase());
+      
+      // Check for duplicates in collectors
+      if (allNames.includes(newDriverName) || newCrewNames.some(name => allNames.includes(name))) {
+        setFormErrors({ driver: "This driver or one of the crew members already exists." });
+        setAddLoading(false);
         return;
       }
+      
+      // Check if crew members are already assigned to routes
+      const assignedCrewMembers = [];
+      for (const route of allRoutes) {
+        if (route.crew && Array.isArray(route.crew)) {
+          for (const crewMember of route.crew) {
+            const crewName = typeof crewMember === 'string' 
+              ? crewMember.toLowerCase() 
+              : (crewMember.firstName && crewMember.lastName 
+                ? (crewMember.firstName + ' ' + crewMember.lastName).toLowerCase() 
+                : '');
+            
+            if (newCrewNames.includes(crewName)) {
+              assignedCrewMembers.push({
+                name: crewName,
+                route: route.route,
+                driver: route.driver
+              });
+            }
+          }
+        }
+      }
+      
+      // If crew members are already assigned, show error
+      if (assignedCrewMembers.length > 0) {
+        const crewList = assignedCrewMembers.map(c => `${c.name} (Route ${c.route} - ${c.driver})`).join(', ');
+        setFormErrors({ 
+          crew: `The following crew members are already assigned to routes: ${crewList}` 
+        });
+        setAddLoading(false);
+        return;
+      }
+      
+      // If all validations pass, add the collector
       await addDoc(collection(db, "collectors"), {
         firstName: form.firstName,
         lastName: form.lastName,
         contact: form.contact,
+        password: form.password,
         driver: form.firstName + ' ' + form.lastName,
         crew: form.crew.filter((c) => c.firstName.trim() && c.lastName.trim()),
         status: 'active',
@@ -135,6 +200,7 @@ const Collector = () => {
     } catch (err) {
       setFormErrors({ submit: "Error adding collector" });
     }
+    setAddLoading(false);
   };
 
   return (
@@ -176,15 +242,32 @@ const Collector = () => {
               ● {collector.status}
             </span>
             <div className="collector-img-wrapper">
-              {collector.img ? (
-                <img
-                  src={collector.img}
-                  alt={collector.driver}
-                  className="collector-img"
-                />
-              ) : (
-                <div className="collector-img placeholder" />
-              )}
+              <img
+                src={require('../Cooked.jpg')}
+                alt={collector.driver}
+                className="collector-img"
+                style={{ objectFit: 'cover', width: '100%', height: '100%', borderRadius: '50%' }}
+              />
+            </div>
+            <div
+              className="collector-edit-btn green-edit-btn"
+              onClick={() => setEditModal({ open: true, collector })}
+              style={{
+                marginTop: 8,
+                marginRight: 10,
+                background: '#4B8B3B',
+                borderRadius: '50%',
+                width: 32,
+                height: 32,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                boxShadow: '0 2px 6px rgba(51,106,41,0.10)',
+                transition: 'background 0.2s',
+              }}
+            >
+              <FaEdit style={{ color: '#fff', fontSize: '1.1rem' }} />
             </div>
             <div className="collector-info">
               <div className="collector-name">{collector.driver}</div>
@@ -195,13 +278,6 @@ const Collector = () => {
               onClick={() => setDetailsModal({ open: true, collector })}
             >
               View Details
-            </div>
-            <div
-              className="collector-edit-btn"
-              style={{ marginTop: 8, color: '#386D2C', cursor: 'pointer', fontWeight: 500 }}
-              onClick={() => setEditModal({ open: true, collector })}
-            >
-              Edit
             </div>
           </div>
         ))}
@@ -281,15 +357,50 @@ const Collector = () => {
                   )}
                 </div>
                 <div className="modal-form-group">
+                  <label htmlFor="password-input">Password</label>
+                  <div className="password-input-group">
+                    <input
+                      id="password-input"
+                      type={showPassword ? "text" : "password"}
+                      name="password"
+                      value={form.password}
+                      onChange={handleFormChange}
+                      required
+                      aria-required="true"
+                      aria-invalid={!!formErrors.password}
+                      className={formErrors.password ? "input-error" : ""}
+                      style={{ width: '100%', paddingRight: 36 }}
+                    />
+                    <span
+                      className="password-toggle-btn"
+                      onClick={() => setShowPassword((prev) => !prev)}
+                      tabIndex={0}
+                      role="button"
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showPassword ? <FaEyeSlash /> : <FaEye />}
+                    </span>
+                  </div>
+                  {formErrors.password && (
+                    <div className="form-error" role="alert">
+                      <span aria-hidden="true">⚠️</span> {formErrors.password}
+                    </div>
+                  )}
+                </div>
+                {formErrors.driver && (
+                  <div className="form-error" role="alert">
+                    <span aria-hidden="true">⚠️</span> {formErrors.driver}
+                  </div>
+                )}
+                <div className="modal-form-group">
                   <label>Crew Members</label>
                   <div className="crew-chips-container">
-                    {form.crew.map((c, idx) => (
+                    {(form.crew || []).map((c, idx) => (
                       <div key={idx} className="crew-chip" style={{ display: 'flex', gap: 8 }}>
                         <input
                           type="text"
                           value={c.firstName}
                           onChange={e => handleCrewChange(idx, 'firstName', e.target.value)}
-                          required={idx === 0}
                           aria-label={`Crew member ${idx + 1} first name`}
                           placeholder="First Name"
                           style={{ width: 90 }}
@@ -298,12 +409,11 @@ const Collector = () => {
                           type="text"
                           value={c.lastName}
                           onChange={e => handleCrewChange(idx, 'lastName', e.target.value)}
-                          required={idx === 0}
                           aria-label={`Crew member ${idx + 1} last name`}
                           placeholder="Last Name"
                           style={{ width: 90 }}
                         />
-                        {form.crew.length > 1 && (
+                        {(form.crew || []).length > 1 && (
                           <button
                             type="button"
                             className="chip-remove-btn"
@@ -332,17 +442,37 @@ const Collector = () => {
                 </div>
               </div>
               <div className="modal-form-right">
-                <div className="img-preview-container">
-                  {form.img ? (
-                    <img
-                      src={form.img}
-                      alt="Profile Preview"
-                      className="img-preview"
-                      onError={e => (e.target.style.display = 'none')}
-                    />
-                  ) : (
-                    <div className="img-preview placeholder">No Image</div>
-                  )}
+                <div className="img-preview-container" style={{ position: 'relative' }}>
+                  <div className="img-preview placeholder">
+                    <FaCamera style={{ fontSize: '1.5rem', color: '#bbb' }} />
+                    <span style={{ fontSize: '0.8rem', marginTop: '4px' }}>No Image</span>
+                  </div>
+                  <div
+                    style={{
+                      position: 'absolute',
+                      bottom: -8,
+                      right: 115,
+                      background: '#fff',
+                      borderRadius: '50%',
+                      boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+                      padding: 3,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: 24,
+                      height: 24,
+                      cursor: 'pointer',
+                    }}
+                    onClick={() => fileInputRef.current && fileInputRef.current.click()}
+                  >
+                    <FaCamera style={{ fontSize: '0.95rem', color: '#4B8B3B' }} />
+                  </div>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    ref={fileInputRef}
+                    style={{ display: 'none' }}
+                  />
                 </div>
               </div>
               {formErrors.submit && (
@@ -351,7 +481,7 @@ const Collector = () => {
                 </div>
               )}
               <div className="modal-form-actions">
-                <button type="submit" className="primary-btn">Add</button>
+                <button type="submit" className="primary-btn" disabled={addLoading}>Add</button>
                 <button type="button" className="secondary-btn" onClick={closeAddModal}>
                   Cancel
                 </button>
@@ -419,17 +549,56 @@ const Collector = () => {
               onSubmit={async (e) => {
                 e.preventDefault();
                 try {
+                  // Fetch all routes to check crew assignments
+                  const routesSnapshot = await getDocs(query(collection(db, "routes")));
+                  const allRoutes = routesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                  
+                  // Get the updated crew names
+                  const updatedCrewNames = (editModal.collector.crew || [])
+                    .filter(c => c.firstName.trim() && c.lastName.trim())
+                    .map(c => (c.firstName + ' ' + c.lastName).toLowerCase());
+                  
+                  // Check if crew members are already assigned to other routes
+                  const assignedCrewMembers = [];
+                  for (const route of allRoutes) {
+                    if (route.crew && Array.isArray(route.crew)) {
+                      for (const crewMember of route.crew) {
+                        const crewName = typeof crewMember === 'string' 
+                          ? crewMember.toLowerCase() 
+                          : (crewMember.firstName && crewMember.lastName 
+                            ? (crewMember.firstName + ' ' + crewMember.lastName).toLowerCase() 
+                            : '');
+                        
+                        if (updatedCrewNames.includes(crewName)) {
+                          assignedCrewMembers.push({
+                            name: crewName,
+                            route: route.route,
+                            driver: route.driver
+                          });
+                        }
+                      }
+                    }
+                  }
+                  
+                  // If crew members are already assigned, show error
+                  if (assignedCrewMembers.length > 0) {
+                    const crewList = assignedCrewMembers.map(c => `${c.name} (Route ${c.route} - ${c.driver})`).join(', ');
+                    alert(`Cannot update: The following crew members are already assigned to routes: ${crewList}`);
+                    return;
+                  }
+                  
                   await updateDoc(doc(db, "collectors", editModal.collector.id), {
                     status: editModal.collector.status,
-                    crew: editModal.collector.crew.filter((c) => c.firstName.trim() && c.lastName.trim()),
+                    crew: (editModal.collector.crew || []).filter((c) => c.firstName.trim() && c.lastName.trim()),
                     firstName: editModal.collector.firstName,
                     lastName: editModal.collector.lastName,
                     contact: editModal.collector.contact,
                     driver: editModal.collector.firstName + ' ' + editModal.collector.lastName,
                   });
                   setEditModal({ open: false, collector: null });
+                  setEditSuccessModalOpen(true);
                 } catch (err) {
-                  alert("Error updating status");
+                  alert("Error updating status: " + (err && err.message ? err.message : JSON.stringify(err)));
                 }
               }}
             >
@@ -444,16 +613,27 @@ const Collector = () => {
                   <option value="inactive">Inactive</option>
                 </select>
               </div>
+              <div style={{ marginBottom: 16 }}>
+                <label>Contact Number</label>
+                <input
+                  type="text"
+                  value={editModal.collector.contact || ''}
+                  onChange={e => setEditModal(modal => ({ ...modal, collector: { ...modal.collector, contact: e.target.value } }))}
+                  required
+                  placeholder="Contact Number"
+                  style={{ width: '100%', padding: 7, borderRadius: 7, marginTop: 4 }}
+                />
+              </div>
               <div className="modal-form-group">
                 <label>Crew Members</label>
                 <div className="crew-chips-container">
-                  {editModal.collector.crew.map((c, idx) => (
+                  {(editModal.collector.crew || []).map((c, idx) => (
                     <div key={idx} className="crew-chip" style={{ display: 'flex', gap: 8 }}>
                       <input
                         type="text"
                         value={c.firstName}
                         onChange={e => setEditModal(modal => {
-                          const crew = [...modal.collector.crew];
+                          const crew = [...(modal.collector.crew || [])];
                           crew[idx].firstName = e.target.value;
                           return { ...modal, collector: { ...modal.collector, crew } };
                         })}
@@ -466,7 +646,7 @@ const Collector = () => {
                         type="text"
                         value={c.lastName}
                         onChange={e => setEditModal(modal => {
-                          const crew = [...modal.collector.crew];
+                          const crew = [...(modal.collector.crew || [])];
                           crew[idx].lastName = e.target.value;
                           return { ...modal, collector: { ...modal.collector, crew } };
                         })}
@@ -475,13 +655,13 @@ const Collector = () => {
                         placeholder="Last Name"
                         style={{ width: 90 }}
                       />
-                      {editModal.collector.crew.length > 1 && (
+                      {(editModal.collector.crew || []).length > 1 && (
                         <button
                           type="button"
                           className="chip-remove-btn"
                           aria-label={`Remove crew member ${idx + 1}`}
                           onClick={() => setEditModal(modal => {
-                            const crew = [...modal.collector.crew];
+                            const crew = [...(modal.collector.crew || [])];
                             crew.splice(idx, 1);
                             return { ...modal, collector: { ...modal.collector, crew } };
                           })}
@@ -495,7 +675,7 @@ const Collector = () => {
                     type="button"
                     className="chip-add-btn"
                     aria-label="Add crew member"
-                    onClick={() => setEditModal(modal => ({ ...modal, collector: { ...modal.collector, crew: [...modal.collector.crew, { firstName: '', lastName: '' }] } }))}
+                    onClick={() => setEditModal(modal => ({ ...modal, collector: { ...modal.collector, crew: [...(modal.collector.crew || []), { firstName: '', lastName: '' }] } }))}
                   >
                     + Add
                   </button>
@@ -508,6 +688,22 @@ const Collector = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Edit Success Modal */}
+      {editSuccessModalOpen && (
+        <div className="collector-modal-bg">
+          <div className="collector-modal">
+            <h2>Driver Updated!</h2>
+            <div style={{ textAlign: 'center', margin: '18px 0' }}>
+              The driver information has been updated successfully.
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <button className="primary-btn" onClick={() => setEditSuccessModalOpen(false)}>
+                OK
+              </button>
+            </div>
           </div>
         </div>
       )}

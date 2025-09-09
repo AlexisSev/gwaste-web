@@ -270,7 +270,7 @@ body {
   top: 0;
   left: 220px;
   right: 0;
-  z-index: 100;
+  z-index: 1000;
   border-bottom: 2px solid #e8efc7;
 }
 

@@ -39,7 +39,7 @@
   font-size: 2.1rem;
   font-weight: 700;
   color: #333;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
   text-align: center;
 }
 .login-subtitle {
@@ -86,6 +86,31 @@
   background: transparent;
   color: #aaa;
 }
+
+.password-toggle-btn {
+  background: none;
+  border: none;
+  color: #2e7d6b;
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: color 0.2s, background 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.password-toggle-btn:hover:not(:disabled) {
+  color: #1b4d3e;
+  background: #f0f7f5;
+}
+
+.password-toggle-btn:disabled {
+  color: #aaa;
+  cursor: not-allowed;
+}
+
 .login-form-links {
   width: 100%;
   text-align: right;

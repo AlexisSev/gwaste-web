@@ -66,6 +66,7 @@ const Dashboard = () => {
 
   // Summary data
   const totalSchedules = routes.length;
+  const uniqueDrivers = new Set(routes.map(r => r.driver)).size;
   // Helper to get unique routes by route number
   const uniqueRoutes = Object.values(
     routes.reduce((acc, route) => {
@@ -73,9 +74,15 @@ const Dashboard = () => {
       return acc;
     }, {})
   );
-  const uniqueDrivers = new Set(routes.map(r => r.driver)).size;
-  // For totalCrew, sum crew from uniqueRoutes only
-  const totalCrew = uniqueRoutes.reduce((acc, r) => acc + (r.crew ? r.crew.length : 0), 0);
+  // For totalCrew, count unique crew members across all uniqueRoutes
+  const crewNames = uniqueRoutes.flatMap(r =>
+    (r.crew || []).map(member =>
+      typeof member === "string"
+        ? member.trim()
+        : [member.firstName, member.lastName].filter(Boolean).join(" ").trim()
+    )
+  ).filter(Boolean);
+  const totalCrew = new Set(crewNames).size;
   const malataCount = routes.filter(r => r.type === 'Malata').length;
   const diliMalataCount = routes.filter(r => r.type === 'Dili Malata').length;
 
@@ -110,7 +117,7 @@ const Dashboard = () => {
               fontWeight: 700,
               fontSize: 18,
               color: '#336A29',
-              padding: '24px 24px 0 24px',
+              padding: '15px 15px 15px 15px',
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center'
