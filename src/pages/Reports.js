@@ -43,7 +43,7 @@ const Reports = () => {
   return (
     <div className="reports-container">
       <div className="reports-header">
-        <h1>Reports & Feedback</h1>
+        <h1>Issues</h1>
         <div className="reports-status-toggle">
           <span
             className={activeTab === "unresolved" ? "active" : "inactive"}
@@ -73,7 +73,7 @@ const Reports = () => {
         {loading ? (
           <div style={{ gridColumn: '1/-1', textAlign: 'center', width: '100%' }}>Loading...</div>
         ) : filteredReports.length === 0 ? (
-          <div style={{ gridColumn: '1/-1', textAlign: 'center', width: '100%' }}>No reports found.</div>
+          <div style={{ gridColumn: '1/-1', textAlign: 'center', width: '100%' }}>No issues found.</div>
         ) : filteredReports.map((report) => (
           <div className="report-card" key={report.id}>
             <span className={`report-status-badge ${report.status}`}>● {report.status}</span>
@@ -93,7 +93,7 @@ const Reports = () => {
       {detailsModal.open && detailsModal.report && (
         <div className="collector-modal-bg">
           <div className="collector-modal">
-            <h2>Report Details</h2>
+            <h2>Issue Details</h2>
             <div style={{ marginBottom: 16 }}>
               <b>Title:</b> {detailsModal.report.title || <>&nbsp;</>}<br />
               <b>User:</b> {detailsModal.report.user || <>&nbsp;</>}<br />

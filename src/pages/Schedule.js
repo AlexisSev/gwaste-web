@@ -38,8 +38,8 @@ import "./Schedule.css";
 const emptyRoute = {
   route: "",
   driver: "",
-  crew: [""],
-  areas: [""],
+  crew: [],
+  areas: [],
   time: "",
   endTime: "",
   type: "",
@@ -47,7 +47,123 @@ const emptyRoute = {
   dayOff: "",
 };
 
-const ROUTE_NUMBERS = ["1", "2", "3", "4", "5"];
+const ROUTE_NUMBERS = ["1", "2", "3", "4", "5", "6"];
+// Predefined schedules by route for autofill when adding a new schedule
+const ROUTE_PRESETS = {
+  "1": {
+    driver: "Mario Alagase",
+    crew: [
+      "Agostine Estrera Jr",
+      "Roberto Del Carmen",
+      "Joey Cantay",
+    ],
+    areas: ["Don Pedro", "Polambato", "Cayang", "TayTayan", "Cogon"],
+    time: "07:00",
+    endTime: "15:00",
+    type: "Dili Malata",
+    frequency: "Daily",
+    dayOff: "Sunday",
+  },
+  "2": {
+    driver: "Rey Owatan",
+    crew: [
+      "Ricky Francisco",
+      "Rex Desuyo",
+      "Carlito Tampus",
+    ],
+    areas: [
+      "Sto. Nino",
+      "Sudlonon",
+      "Lourdes",
+      "Carbon",
+      "Pandan",
+      "Bungtod",
+    ],
+    time: "07:00",
+    endTime: "15:00",
+    type: "Dili Malata",
+    frequency: "Daily",
+    dayOff: "Sunday",
+  },
+  "3": {
+    driver: "Vicente Subingsubing",
+    crew: [
+      "Noli Dahunan",
+      "Anthony Remulta",
+      "Dominador Antopina",
+    ],
+    areas: [
+      "ARAPAL Farm",
+      "Bungtod (Maharat & Laray)",
+      "Dakit (Highway & Provincial Rd)",
+      "Malingin Highway",
+    ],
+    time: "07:00",
+    endTime: "15:00",
+    type: "Dili Malata",
+    frequency: "Daily",
+    dayOff: "Sunday",
+  },
+  "4": {
+    driver: "Ricardo Olivar",
+    crew: [
+      "Joel Ursal Sr",
+      "Radne Bedrijo",
+      "Jermin Andrade",
+    ],
+    areas: [
+      "A/B Cogon",
+      "Siocon",
+      "Odlot",
+      "Marangong",
+      "Libertad",
+      "Guadalupe",
+    ],
+    time: "07:00",
+    endTime: "15:00",
+    type: "Dili Malata",
+    frequency: "Daily",
+    dayOff: "Saturday",
+  },
+  "5": {
+    driver: "Belmar Alagase",
+    crew: [
+      "Winful Catampatan",
+      "Orgie Menoria",
+      "Wilmor Viray",
+    ],
+    areas: [
+      "Public Market",
+      "Cantecson",
+      "Sambag",
+      "Sto. Rosario",
+      "San Vicente",
+      "LPC",
+    ],
+    time: "07:00",
+    endTime: "15:00",
+    type: "Dili Malata",
+    frequency: "Daily",
+    dayOff: "Saturday",
+  },
+  "6": {
+    driver: "Reynaldo Balunan",
+    crew: [
+      "Arnel Casiano",
+      "Marjun Ylanan",
+      "Jade Silad",
+    ],
+    areas: [
+      "Gairan",
+      "Nailon",
+    ],
+    time: "07:00",
+    endTime: "15:00",
+    type: "Dili Malata",
+    frequency: "Daily",
+    dayOff: "Saturday",
+  },
+};
 const AREAS = [
   "Gairan",
   "Don Pedro",
@@ -109,6 +225,23 @@ function formatTime12h(timeStr) {
   hour = hour % 12;
   if (hour === 0) hour = 12;
   return `${hour}:${m} ${ampm}`;
+}
+
+// Helpers for time validation
+function isAM(timeStr) {
+  if (!timeStr) return false;
+  const hour = parseInt(timeStr.split(":")[0], 10);
+  return hour < 12; // 00:00 - 11:59
+}
+
+function getMinEndTime(startTime) {
+  if (!startTime) return "12:00";
+  if (isAM(startTime)) {
+    // If collection starts in the morning, end time must be PM
+    return "12:00";
+  }
+  // If starts in PM, end time must be later than or equal to start
+  return startTime;
 }
 
 const Schedule = () => {
@@ -188,6 +321,19 @@ const Schedule = () => {
       errors.areas = "At least one area";
     if (!form.time) errors.time = "Collection start time is required";
     if (!form.endTime) errors.endTime = "Collection end time is required";
+    // Additional time validation: if start is AM, end must be PM
+    if (form.time && form.endTime) {
+      const [sh, sm] = form.time.split(":").map((n) => parseInt(n, 10));
+      const [eh, em] = form.endTime.split(":").map((n) => parseInt(n, 10));
+      const startMinutes = sh * 60 + sm;
+      const endMinutes = eh * 60 + em;
+      if (isAM(form.time) && endMinutes < 12 * 60) {
+        errors.endTime = "End time must be in the afternoon (PM).";
+      }
+      if (endMinutes <= startMinutes) {
+        errors.endTime = "End time must be after start time.";
+      }
+    }
     if (!form.type) errors.type = "Waste type is required";
     if (!form.frequency) errors.frequency = "Frequency is required";
     if (!form.dayOff) errors.dayOff = "Day off is required";
@@ -221,6 +367,48 @@ const Schedule = () => {
   // Form field changes
   const handleFormChange = (e) => {
     const { name, value } = e.target;
+    if (name === "route") {
+      setForm((prev) => {
+        const next = { ...prev, route: value };
+        // Only auto-fill when adding a new schedule (not editing)
+        if (!editId && ROUTE_PRESETS[value]) {
+          const p = ROUTE_PRESETS[value];
+          next.driver = p.driver;
+          next.crew = [...p.crew];
+          next.areas = [...p.areas];
+          next.time = p.time;
+          next.endTime = p.endTime;
+          next.type = p.type;
+          next.frequency = p.frequency;
+          next.dayOff = p.dayOff;
+        }
+        return next;
+      });
+      return;
+    }
+    if (name === "time") {
+      setForm((prev) => {
+        const next = { ...prev, time: value };
+        // If start time is AM, auto-bump end time to 12:00 PM when missing or AM
+        if (isAM(value)) {
+          const shouldBump = !prev.endTime || isAM(prev.endTime);
+          if (shouldBump) {
+            next.endTime = "12:00";
+          }
+        } else if (prev.endTime) {
+          // If start is PM and end exists but is earlier, align end to start
+          const [sh, sm] = value.split(":").map((n) => parseInt(n, 10));
+          const [eh, em] = prev.endTime.split(":").map((n) => parseInt(n, 10));
+          const startMinutes = sh * 60 + sm;
+          const endMinutes = eh * 60 + em;
+          if (endMinutes < startMinutes) {
+            next.endTime = value;
+          }
+        }
+        return next;
+      });
+      return;
+    }
     setForm((prev) => ({ ...prev, [name]: value }));
   };
 
@@ -282,7 +470,15 @@ const Schedule = () => {
       if (coords.length === 1) {
         coords = [coords[0], coords[0]];
       }
-      const formWithCoords = { ...form, coordinates: coords };
+      // Clean crew and areas to remove empty/whitespace-only entries
+      const cleanedCrew = (Array.isArray(form.crew) ? form.crew : [])
+        .map((c) => (typeof c === "string" ? c.trim() : c))
+        .filter((c) => (typeof c === "string" ? c.length > 0 : !!c));
+      const cleanedAreas = (Array.isArray(form.areas) ? form.areas : [])
+        .map((a) => (typeof a === "string" ? a.trim() : a))
+        .filter((a) => (typeof a === "string" ? a.length > 0 : !!a));
+
+      const formWithCoords = { ...form, crew: cleanedCrew, areas: cleanedAreas, coordinates: coords };
       if (editId) {
         await updateDoc(doc(db, "routes", editId), formWithCoords);
         setSnackbar({
@@ -494,8 +690,22 @@ const Schedule = () => {
               value={form.driver}
               onChange={handleFormChange}
               error={!!formErrors.driver}
+              input={<OutlinedInput label="Driver" />}
+              renderValue={(selected) => (
+                <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                  {selected ? (
+                    <Chip
+                      key={selected}
+                      label={selected}
+                      size="small"
+                      onDelete={() => setForm((prev) => ({ ...prev, driver: "" }))}
+                    />
+                  ) : null}
+                </Box>
+              )}
             >
-              {allDrivers.map((driver) => (
+              {Array.from(new Set([...(allDrivers || []), ...(form.driver ? [form.driver] : [])]))
+                .map((driver) => (
                 <MenuItem key={driver} value={driver}>
                   {driver}
                 </MenuItem>
@@ -522,13 +732,24 @@ const Schedule = () => {
                 <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
                   {selected.length > 0
                     ? selected.map((value) => (
-                        <Chip key={value} label={value} size="small" />
+                        <Chip
+                          key={value}
+                          label={value}
+                          size="small"
+                          onDelete={() =>
+                            setForm((prev) => ({
+                              ...prev,
+                              crew: (prev.crew || []).filter((c) => c !== value),
+                            }))
+                          }
+                        />
                       ))
                     : null}
                 </Box>
               )}
             >
-              {allCrew.map((crew) => (
+              {Array.from(new Set([...(allCrew || []), ...((form.crew || []).filter(Boolean))]))
+                .map((crew) => (
                 <MenuItem key={crew} value={crew}>
                   <Checkbox checked={form.crew.indexOf(crew) > -1} />
                   {crew}
@@ -542,16 +763,16 @@ const Schedule = () => {
             )}
           </FormControl>
           <FormControl fullWidth margin="dense" variant="outlined">
-            <InputLabel>Areas</InputLabel>
+            <InputLabel>Barangays</InputLabel>
             <Select
-              label="Areas"
+              label="Barangays"
               name="areas"
               multiple
               value={form.areas}
               onChange={(e) =>
                 setForm((prev) => ({ ...prev, areas: e.target.value }))
               }
-              input={<OutlinedInput label="Areas" />}
+              input={<OutlinedInput label="Barangays" />}
               renderValue={(selected) => (
                 <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
                   {selected.length > 0
@@ -628,6 +849,7 @@ const Schedule = () => {
             onChange={handleFormChange}
             error={!!formErrors.endTime}
             helperText={formErrors.endTime}
+            inputProps={{ min: getMinEndTime(form.time) }}
           />
           <FormControl fullWidth margin="dense" variant="outlined">
             <InputLabel>Waste Type</InputLabel>

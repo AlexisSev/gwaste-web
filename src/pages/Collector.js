@@ -128,15 +128,17 @@ const Collector = () => {
       const routesSnapshot = await getDocs(query(collection(db, "routes")));
       const allRoutes = routesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       
-      // Gather all existing driver and crew names (case-insensitive)
-      const allNames = latestCollectors.flatMap(c => [
-        (c.driver || '').toLowerCase(),
-        ...(c.crew || []).map(member =>
+      // Gather existing names by role (case-insensitive)
+      const existingDriverNames = latestCollectors
+        .map(c => (c.driver || '').toLowerCase().trim())
+        .filter(Boolean);
+      const existingCrewNames = latestCollectors
+        .flatMap(c => (c.crew || []).map(member =>
           (member.firstName && member.lastName)
-            ? (member.firstName + ' ' + member.lastName).toLowerCase()
+            ? (member.firstName + ' ' + member.lastName).toLowerCase().trim()
             : ''
-        )
-      ]).filter(Boolean);
+        ))
+        .filter(Boolean);
       
       // New driver name
       const newDriverName = (form.firstName + ' ' + form.lastName).toLowerCase();
@@ -146,9 +148,14 @@ const Collector = () => {
         .filter(c => c.firstName.trim() && c.lastName.trim())
         .map(c => (c.firstName + ' ' + c.lastName).toLowerCase());
       
-      // Check for duplicates in collectors
-      if (allNames.includes(newDriverName) || newCrewNames.some(name => allNames.includes(name))) {
-        setFormErrors({ driver: "This driver or one of the crew members already exists." });
+      // Check duplicates with role separation to avoid false positives
+      if (existingDriverNames.includes(newDriverName)) {
+        setFormErrors({ driver: "This driver already exists." });
+        setAddLoading(false);
+        return;
+      }
+      if (newCrewNames.some(name => existingCrewNames.includes(name))) {
+        setFormErrors({ crew: "One or more crew members already exist." });
         setAddLoading(false);
         return;
       }
@@ -553,10 +560,13 @@ const Collector = () => {
                   const routesSnapshot = await getDocs(query(collection(db, "routes")));
                   const allRoutes = routesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                   
-                  // Get the updated crew names
+                  // Get the updated crew names and intended driver name
                   const updatedCrewNames = (editModal.collector.crew || [])
                     .filter(c => c.firstName.trim() && c.lastName.trim())
                     .map(c => (c.firstName + ' ' + c.lastName).toLowerCase());
+                  const intendedDriverName = (editModal.collector.firstName + ' ' + editModal.collector.lastName)
+                    .toLowerCase()
+                    .trim();
                   
                   // Check if crew members are already assigned to other routes
                   const assignedCrewMembers = [];
@@ -570,6 +580,11 @@ const Collector = () => {
                             : '');
                         
                         if (updatedCrewNames.includes(crewName)) {
+                          // Allow if this crew is assigned to a route under the same driver being edited
+                          const routeDriverName = (route.driver || '').toLowerCase().trim();
+                          if (routeDriverName === intendedDriverName) {
+                            continue;
+                          }
                           assignedCrewMembers.push({
                             name: crewName,
                             route: route.route,

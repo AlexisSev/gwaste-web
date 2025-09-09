@@ -18,6 +18,8 @@ const ViewMap = () => {
   const mapRef = useRef(null);
   const truckMarkersRef = useRef({});
   const driverCacheRef = useRef({}); // Cache driver data by ID
+  const [trucks, setTrucks] = useState([]); // all trucks for list view
+  const [selectedTruckId, setSelectedTruckId] = useState(null);
 
   useEffect(() => {
     initializeMap();
@@ -105,6 +107,39 @@ const ViewMap = () => {
           }
         }
       }
+
+      // Build trucks list for sidebar
+      const list = [];
+      for (const docSnap of snapshot.docs) {
+        const data = docSnap.data();
+        const id = data.collector_id;
+        if (!data.latitude || !data.longitude) continue;
+
+        let driverInfo = driverCacheRef.current[id];
+        if (!driverInfo) {
+          try {
+            const driverDoc = await getDoc(doc(db, "collectors", id));
+            if (driverDoc.exists()) {
+              driverInfo = driverDoc.data();
+              driverCacheRef.current[id] = driverInfo;
+            } else {
+              driverInfo = { collector_name: "Unknown Driver" };
+            }
+          } catch {
+            driverInfo = { collector_name: "Unknown Driver" };
+          }
+        }
+
+        list.push({
+          id,
+          latitude: data.latitude,
+          longitude: data.longitude,
+          updatedAt: data.updated_at,
+          driverName: driverInfo.collector_name || driverInfo.driver || "Driver",
+          profileImage: driverInfo.profile_image || null,
+        });
+      }
+      setTrucks(list);
     });
 
     return () => unsubscribe();
@@ -125,6 +160,66 @@ const ViewMap = () => {
       <div className="map-container">
         <div id="map" className="osm-map"></div>
       </div>
+
+      {/* Trucks overlay list */}
+      <div className="map-overlay-legend trucks-overlay" style={{ pointerEvents: 'auto' }}>
+        <h4>Trucks</h4>
+        <div className="legend-items">
+          {trucks.map((t) => (
+            <div
+              key={t.id}
+              className="legend-item truck-item"
+              onClick={() => {
+                setSelectedTruckId(t.id);
+                const marker = truckMarkersRef.current[t.id];
+                if (marker) {
+                  map.panTo([t.latitude, t.longitude]);
+                  marker.openPopup();
+                }
+              }}
+              style={{ cursor: 'pointer' }}
+            >
+              <div className="legend-color" style={{ background: '#28a745' }}></div>
+              <span className="truck-name">{t.driverName}</span>
+            </div>
+          ))}
+          {trucks.length === 0 && <div className="legend-item empty"><span>No trucks online</span></div>}
+        </div>
+      </div>
+
+      {/* Selected truck details */}
+      {selectedTruckId && (
+        <div className="map-overlay-info">
+          {(() => {
+            const t = trucks.find((x) => x.id === selectedTruckId);
+            if (!t) return null;
+            return (
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  {t.profileImage ? (
+                    <img src={t.profileImage} alt="Driver" style={{ width: 28, height: 28, borderRadius: '50%' }} />
+                  ) : (
+                    <span role="img" aria-label="truck">🚛</span>
+                  )}
+                  <strong>{t.driverName}</strong>
+                </div>
+                <div style={{ fontSize: 12, color: '#333' }}>
+                  <div><b>Lat:</b> {t.latitude.toFixed(5)}</div>
+                  <div><b>Lng:</b> {t.longitude.toFixed(5)}</div>
+                  <div><b>Last update:</b> {new Date(t.updatedAt).toLocaleString()}</div>
+                </div>
+                <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
+                  <button className="detail-btn primary" onClick={() => {
+                    const marker = truckMarkersRef.current[t.id];
+                    if (marker) marker.openPopup();
+                  }}>Open Popup</button>
+                  <button className="detail-btn secondary" onClick={() => setSelectedTruckId(null)}>Close</button>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      )}
     </div>
   );
 };

@@ -5,6 +5,7 @@ import {
   FaMap,
   FaUserTie,
   FaChartBar,
+  FaExclamationTriangle,
   FaCog,
   FaSignOutAlt,
 } from "react-icons/fa";
@@ -48,7 +49,7 @@ const Sidebar = ({ onNavigate, currentPage, onLogout }) => {
               onClick={() => onNavigate("Reports")}
               className={currentPage === "Reports" ? "active" : ""}
             >
-              <FaChartBar /> Reports & Feedback
+              <FaExclamationTriangle /> Issues
               <span className="sidebar-badge"></span>
             </li>
             <li
