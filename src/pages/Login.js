@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "../firebase";
-import { FaUser, FaLock, FaFacebookF, FaTwitter, FaLinkedinIn } from 'react-icons/fa';
+import { FaUser, FaLock, FaFacebookF, FaTwitter, FaLinkedinIn, FaEye, FaEyeSlash } from 'react-icons/fa';
 import "./Login.css";
 
 const Login = ({ onLogin }) => {
@@ -11,6 +11,7 @@ const Login = ({ onLogin }) => {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -63,7 +64,7 @@ const Login = ({ onLogin }) => {
     <div className="login-split-bg">
       <div className="login-bg-centered">
         <div className="login-card">
-          <h2 className="login-title">Welcome Back Admin!</h2>
+          <h2 className="login-title">Welcome Back, Admin!</h2>
           <p className="login-subtitle">Ready to manage things?</p>
           {error && <div className="error-message">{error}</div>}
           <form className="login-form-modern" onSubmit={handleSubmit}>
@@ -83,7 +84,7 @@ const Login = ({ onLogin }) => {
             <div className="input-icon-group">
               <span className="input-icon"><FaLock /></span>
               <input
-                type="password"
+                type={showPassword ? "text" : "password"}
                 name="password"
                 placeholder="Password"
                 value={credentials.password}
@@ -92,6 +93,14 @@ const Login = ({ onLogin }) => {
                 disabled={loading}
                 autoComplete="current-password"
               />
+              <button
+                type="button"
+                className="password-toggle-btn"
+                onClick={() => setShowPassword(!showPassword)}
+                disabled={loading}
+              >
+                {showPassword ? <FaEyeSlash /> : <FaEye />}
+              </button>
             </div>
             <div className="login-form-links">
               <a href="#" className="forgot-link">Forgot your password?</a>

@@ -1,7 +1,12 @@
 .view-map-container {
-  padding: 20px;
+  padding: 5px;
   max-width: 1400px;
-  margin: 0 auto;
+  margin: 0;
+  height: 85vh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  z-index: 1;
 }
 
 /* Notifications */
@@ -333,16 +338,22 @@
   padding: 24px 0 24px 0;
   box-shadow: 0 2px 8px rgba(0,0,0,0.06);
   align-items: center;
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  z-index: 1;
 }
 
 .osm-map {
   width: 96%;
-  height: 420px;
+  height: 85vh;
   border-radius: 10px;
   overflow: hidden;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
   margin: 0 auto;
   background: #fff;
+  flex: 1;
+  min-height: 0;
 }
 
 /* Custom marker styles */
@@ -827,7 +838,7 @@
   }
   
   .osm-map {
-    height: 400px;
+    height: 70vh;
   }
   
   .map-stats {
@@ -855,16 +866,16 @@
 
 .map-overlay-legend {
   position: absolute;
-  top: 16px;
-  right: 16px;
+  top: 35px;
+  right: 35px;
   z-index: 500;
   background: rgba(255,255,255,0.85);
   border-radius: 6px;
   box-shadow: 0 1px 4px rgba(0,0,0,0.18);
   border: 1px solid #bbb;
   padding: 8px 12px 6px 12px;
-  min-width: 140px;
-  max-width: 220px;
+  min-width: 180px;
+  max-width: 260px;
   font-size: 13px;
   pointer-events: auto;
 }
@@ -902,6 +913,27 @@
   font-size: 12px;
   color: #222;
   font-weight: 500;
+}
+
+/* Trucks overlay tweaks */
+.trucks-overlay {
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 10px 12px;
+}
+.trucks-overlay .truck-item {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+.trucks-overlay .truck-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+.trucks-overlay .legend-item.empty {
+  justify-content: center;
 }
 
 @media (max-width: 768px) {

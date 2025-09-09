@@ -12,12 +12,6 @@ import {
   IconButton,
   Snackbar,
   Alert,
-  List,
-  ListItem,
-  ListItemText,
-  Divider,
-  Stack,
-  DialogContentText,
   CircularProgress,
   Select,
   MenuItem,
@@ -26,39 +20,173 @@ import {
   OutlinedInput,
   Checkbox,
 } from "@mui/material";
-import { Add, Edit, Delete, Group, AccessTime, DeleteOutline, CalendarToday, Recycling, InfoOutlined, Close } from "@mui/icons-material";
+import { Close } from "@mui/icons-material";
 import { db } from "../firebase";
 import {
   collection,
   addDoc,
   updateDoc,
-  deleteDoc,
   doc,
   onSnapshot,
   query,
   orderBy,
+  getDocs,
 } from "firebase/firestore";
-import dayjs from 'dayjs';
+import dayjs from "dayjs";
 import "./Schedule.css";
 
 const emptyRoute = {
   route: "",
   driver: "",
-  crew: [""],
-  areas: [""],
+  crew: [],
+  areas: [],
   time: "",
-  endTime: "", // New field
+  endTime: "",
   type: "",
   frequency: "",
   dayOff: "",
 };
 
-const ROUTE_NUMBERS = ["1", "2", "3", "5"];
+const ROUTE_NUMBERS = ["1", "2", "3", "4", "5", "6"];
+// Predefined schedules by route for autofill when adding a new schedule
+const ROUTE_PRESETS = {
+  "1": {
+    driver: "Mario Alagase",
+    crew: [
+      "Agostine Estrera Jr",
+      "Roberto Del Carmen",
+      "Joey Cantay",
+    ],
+    areas: ["Don Pedro", "Polambato", "Cayang", "TayTayan", "Cogon"],
+    time: "07:00",
+    endTime: "15:00",
+    type: "Dili Malata",
+    frequency: "Daily",
+    dayOff: "Sunday",
+  },
+  "2": {
+    driver: "Rey Owatan",
+    crew: [
+      "Ricky Francisco",
+      "Rex Desuyo",
+      "Carlito Tampus",
+    ],
+    areas: [
+      "Sto. Nino",
+      "Sudlonon",
+      "Lourdes",
+      "Carbon",
+      "Pandan",
+      "Bungtod",
+    ],
+    time: "07:00",
+    endTime: "15:00",
+    type: "Dili Malata",
+    frequency: "Daily",
+    dayOff: "Sunday",
+  },
+  "3": {
+    driver: "Vicente Subingsubing",
+    crew: [
+      "Noli Dahunan",
+      "Anthony Remulta",
+      "Dominador Antopina",
+    ],
+    areas: [
+      "ARAPAL Farm",
+      "Bungtod (Maharat & Laray)",
+      "Dakit (Highway & Provincial Rd)",
+      "Malingin Highway",
+    ],
+    time: "07:00",
+    endTime: "15:00",
+    type: "Dili Malata",
+    frequency: "Daily",
+    dayOff: "Sunday",
+  },
+  "4": {
+    driver: "Ricardo Olivar",
+    crew: [
+      "Joel Ursal Sr",
+      "Radne Bedrijo",
+      "Jermin Andrade",
+    ],
+    areas: [
+      "A/B Cogon",
+      "Siocon",
+      "Odlot",
+      "Marangong",
+      "Libertad",
+      "Guadalupe",
+    ],
+    time: "07:00",
+    endTime: "15:00",
+    type: "Dili Malata",
+    frequency: "Daily",
+    dayOff: "Saturday",
+  },
+  "5": {
+    driver: "Belmar Alagase",
+    crew: [
+      "Winful Catampatan",
+      "Orgie Menoria",
+      "Wilmor Viray",
+    ],
+    areas: [
+      "Public Market",
+      "Cantecson",
+      "Sambag",
+      "Sto. Rosario",
+      "San Vicente",
+      "LPC",
+    ],
+    time: "07:00",
+    endTime: "15:00",
+    type: "Dili Malata",
+    frequency: "Daily",
+    dayOff: "Saturday",
+  },
+  "6": {
+    driver: "Reynaldo Balunan",
+    crew: [
+      "Arnel Casiano",
+      "Marjun Ylanan",
+      "Jade Silad",
+    ],
+    areas: [
+      "Gairan",
+      "Nailon",
+    ],
+    time: "07:00",
+    endTime: "15:00",
+    type: "Dili Malata",
+    frequency: "Daily",
+    dayOff: "Saturday",
+  },
+};
 const AREAS = [
-  "Gairan", "Don Pedro", "Polambato", "Cayang", "Taylayan", "Cogon",
-  "Sto. Nino", "Sudlonon", "Lourdes", "Carbon", "Pandan", "Bungtod",
-  "ARAPAL Farm", "Bungtod (Maharat & Laray)", "Dakit (Highway & Provincial Rd)", "Malingin Highway",
-  "A/B Cogon", "Siocon", "Odlot", "Marangong", "Libertad", "Guadalupe"
+  "Gairan",
+  "Don Pedro",
+  "Polambato",
+  "Cayang",
+  "TayTayan",
+  "Cogon",
+  "Sto. Nino",
+  "Sudlonon",
+  "Lourdes",
+  "Carbon",
+  "Pandan",
+  "Bungtod",
+  "ARAPAL Farm",
+  "Bungtod (Maharat & Laray)",
+  "Dakit (Highway & Provincial Rd)",
+  "Malingin Highway",
+  "A/B Cogon",
+  "Siocon",
+  "Odlot",
+  "Marangong",
+  "Libertad",
+  "Guadalupe",
 ];
 const WASTE_TYPES = ["Malata", "Dili Malata"];
 const FREQUENCIES = [
@@ -68,103 +196,97 @@ const FREQUENCIES = [
   "Every Wednesday",
   "Every Thursday",
   "Every Friday",
-  "Every Saturday"
+  "Every Saturday",
 ];
 const DAYS_OFF = ["Saturday", "Sunday"];
 
-const DAYS = ['MON', 'TUE', 'WED', 'THUR', 'FRI', 'SAT', 'SUN'];
+// const DAYS = ['MON', 'TUE', 'WED', 'THUR', 'FRI', 'SAT', 'SUN'];
 
 // Color palette for routes
 const ROUTE_COLORS = [
-  '#28a745', // green
-  '#007bff', // blue
-  '#ffc107', // yellow
-  '#6f42c1', // purple
-  '#e83e8c', // pink
-  '#fd7e14', // orange
-  '#17a2b8', // teal
-  '#dc3545', // red
-  '#20c997', // cyan
-  '#343a40'  // dark gray
+  "#28a745", // green
+  "#007bff", // blue
+  "#ffc107", // yellow
+  "#6f42c1", // purple
+  "#e83e8c", // pink
+  "#fd7e14", // orange
+  "#17a2b8", // teal
+  "#dc3545", // red
+  "#20c997", // cyan
+  "#343a40", // dark gray
 ];
 
 // Helper to format time as 12-hour with AM/PM
 function formatTime12h(timeStr) {
-  if (!timeStr) return '';
-  const [h, m] = timeStr.split(':');
+  if (!timeStr) return "";
+  const [h, m] = timeStr.split(":");
   let hour = parseInt(h, 10);
-  const ampm = hour >= 12 ? 'PM' : 'AM';
+  const ampm = hour >= 12 ? "PM" : "AM";
   hour = hour % 12;
   if (hour === 0) hour = 12;
   return `${hour}:${m} ${ampm}`;
 }
 
+// Helpers for time validation
+function isAM(timeStr) {
+  if (!timeStr) return false;
+  const hour = parseInt(timeStr.split(":")[0], 10);
+  return hour < 12; // 00:00 - 11:59
+}
+
+function getMinEndTime(startTime) {
+  if (!startTime) return "12:00";
+  if (isAM(startTime)) {
+    // If collection starts in the morning, end time must be PM
+    return "12:00";
+  }
+  // If starts in PM, end time must be later than or equal to start
+  return startTime;
+}
+
 const Schedule = () => {
   const [routes, setRoutes] = useState([]);
-  const [selectedRoute, setSelectedRoute] = useState(null);
+  const [, setSelectedRoute] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState(null); // null for add, id for edit
   const [form, setForm] = useState(emptyRoute);
   const [formErrors, setFormErrors] = useState({});
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [deleteId, setDeleteId] = useState(null);
-  const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: "",
+    severity: "success",
+  });
   const [loading, setLoading] = useState(true);
-  const [currentMonth, setCurrentMonth] = useState(dayjs().month());
-  const [currentYear, setCurrentYear] = useState(dayjs().year());
-  const [viewMode, setViewMode] = useState('monthly');
-  const [selectedDate, setSelectedDate] = useState(null);
   const [infoModalOpen, setInfoModalOpen] = useState(false);
-  const [infoRoute, setInfoRoute] = useState(null);
+  const [infoRoute] = useState(null);
   const [successModalOpen, setSuccessModalOpen] = useState(false);
 
-  // Load routes from Firestore
   useEffect(() => {
     const q = query(collection(db, "routes"), orderBy("route"));
-    const unsub = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-      setRoutes(data);
-      // Always set selectedRoute to the first route if none is selected or if the selected route was deleted
-      if (data.length > 0) {
-        setSelectedRoute((prev) => (prev && data.some(r => r.id === prev) ? prev : data[0].id));
-      } else {
-        setSelectedRoute(null);
-      }
-      setLoading(false);
-    }, () => setLoading(false)); // Ensure loading is set to false on error
+    const unsub = onSnapshot(
+      q,
+      (snapshot) => {
+        const data = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        setRoutes(data);
+        // Always set selectedRoute to the first route if none is selected or if the selected route was deleted
+        if (data.length > 0) {
+          setSelectedRoute((prev) =>
+            prev && data.some((r) => r.id === prev) ? prev : data[0].id
+          );
+        } else {
+          setSelectedRoute(null);
+        }
+        setLoading(false);
+      },
+      () => setLoading(false)
+    ); // Ensure loading is set to false on error
     return () => unsub();
     // eslint-disable-next-line
   }, []); // selectedRoute is intentionally not included to avoid infinite loop
 
-  useEffect(() => {
-    if (routes.length === 0 && !loading) {
-      // Seed Route 1 with two entries if no schedules exist
-      const seedSchedules = async () => {
-        const base = {
-          route: "1",
-          driver: "MARIO ALAGAR",
-          crew: ["AGUSTIN ESTEBAN JR.", "ROBERTO DEL CORON", "JOEY CANTAY"],
-          areas: ["Don Pedro", "Polambato", "Cayang", "Cogon"],
-          time: "07:00",
-          endTime: "15:00",
-          dayOff: "Sunday"
-        };
-        await addDoc(collection(db, "routes"), {
-          ...base,
-          type: "Dili Malata",
-          frequency: "Daily"
-        });
-        await addDoc(collection(db, "routes"), {
-          ...base,
-          type: "Malata",
-          frequency: "Every Wednesday"
-        });
-      };
-      seedSchedules();
-    }
-  }, [routes, loading]);
-
-  // Fetch collectors from Firestore
   const [collectors, setCollectors] = useState([]);
   useEffect(() => {
     const q = query(collection(db, "collectors"), orderBy("driver"));
@@ -176,9 +298,12 @@ const Schedule = () => {
   }, []);
 
   // Get all drivers and all crew from collectors
-  const allDrivers = collectors.filter(c => c.status === "active").map(c => c.driver).filter(Boolean);
-  const allCrew = collectors.flatMap(c =>
-    (c.crew || []).map(member =>
+  const allDrivers = collectors
+    .filter((c) => c.status === "active")
+    .map((c) => c.driver)
+    .filter(Boolean);
+  const allCrew = collectors.flatMap((c) =>
+    (c.crew || []).map((member) =>
       typeof member === "string"
         ? member
         : [member.firstName, member.lastName].filter(Boolean).join(" ")
@@ -190,14 +315,29 @@ const Schedule = () => {
     const errors = {};
     if (!form.route) errors.route = "Route number is required";
     if (!form.driver) errors.driver = "Driver is required";
-    if (!form.crew.filter((c) => c.trim()).length) errors.crew = "At least one crew member";
-    if (!form.areas.filter((a) => a.trim()).length) errors.areas = "At least one area";
+    if (!form.crew.filter((c) => c.trim()).length)
+      errors.crew = "At least one crew member";
+    if (!form.areas.filter((a) => a.trim()).length)
+      errors.areas = "At least one area";
     if (!form.time) errors.time = "Collection start time is required";
     if (!form.endTime) errors.endTime = "Collection end time is required";
+    // Additional time validation: if start is AM, end must be PM
+    if (form.time && form.endTime) {
+      const [sh, sm] = form.time.split(":").map((n) => parseInt(n, 10));
+      const [eh, em] = form.endTime.split(":").map((n) => parseInt(n, 10));
+      const startMinutes = sh * 60 + sm;
+      const endMinutes = eh * 60 + em;
+      if (isAM(form.time) && endMinutes < 12 * 60) {
+        errors.endTime = "End time must be in the afternoon (PM).";
+      }
+      if (endMinutes <= startMinutes) {
+        errors.endTime = "End time must be after start time.";
+      }
+    }
     if (!form.type) errors.type = "Waste type is required";
     if (!form.frequency) errors.frequency = "Frequency is required";
     if (!form.dayOff) errors.dayOff = "Day off is required";
-    if (form.date && dayjs(form.date).isBefore(dayjs(), 'day')) {
+    if (form.date && dayjs(form.date).isBefore(dayjs(), "day")) {
       errors.date = "Cannot add a schedule for a past date.";
     }
     setFormErrors(errors);
@@ -227,41 +367,125 @@ const Schedule = () => {
   // Form field changes
   const handleFormChange = (e) => {
     const { name, value } = e.target;
+    if (name === "route") {
+      setForm((prev) => {
+        const next = { ...prev, route: value };
+        // Only auto-fill when adding a new schedule (not editing)
+        if (!editId && ROUTE_PRESETS[value]) {
+          const p = ROUTE_PRESETS[value];
+          next.driver = p.driver;
+          next.crew = [...p.crew];
+          next.areas = [...p.areas];
+          next.time = p.time;
+          next.endTime = p.endTime;
+          next.type = p.type;
+          next.frequency = p.frequency;
+          next.dayOff = p.dayOff;
+        }
+        return next;
+      });
+      return;
+    }
+    if (name === "time") {
+      setForm((prev) => {
+        const next = { ...prev, time: value };
+        // If start time is AM, auto-bump end time to 12:00 PM when missing or AM
+        if (isAM(value)) {
+          const shouldBump = !prev.endTime || isAM(prev.endTime);
+          if (shouldBump) {
+            next.endTime = "12:00";
+          }
+        } else if (prev.endTime) {
+          // If start is PM and end exists but is earlier, align end to start
+          const [sh, sm] = value.split(":").map((n) => parseInt(n, 10));
+          const [eh, em] = prev.endTime.split(":").map((n) => parseInt(n, 10));
+          const startMinutes = sh * 60 + sm;
+          const endMinutes = eh * 60 + em;
+          if (endMinutes < startMinutes) {
+            next.endTime = value;
+          }
+        }
+        return next;
+      });
+      return;
+    }
     setForm((prev) => ({ ...prev, [name]: value }));
-  };
-  const handleArrayChange = (field, idx, value) => {
-    setForm((prev) => {
-      const arr = [...prev[field]];
-      arr[idx] = value;
-      return { ...prev, [field]: arr };
-    });
-  };
-  const addArrayField = (field) => {
-    setForm((prev) => ({ ...prev, [field]: [...prev[field], ""] }));
-  };
-  const removeArrayField = (field, idx) => {
-    setForm((prev) => {
-      const arr = [...prev[field]];
-      arr.splice(idx, 1);
-      return { ...prev, [field]: arr };
-    });
   };
 
   // Submit form
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validate()) return;
+
     try {
+      // Check for crew assignment conflicts
+      const routesSnapshot = await getDocs(query(collection(db, "routes")));
+      const allRoutes = routesSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+
+      let newCrewMembers = form.crew || [];
+      if (typeof newCrewMembers === "string") {
+        newCrewMembers = newCrewMembers.split(",").map((c) => c.trim());
+      }
+      newCrewMembers = newCrewMembers.filter((c) => c); // removes blanks
+      // Check if any crew members are already assigned to other routes
+      const assignedCrewMembers = [];
+      for (const route of allRoutes) {
+        // Skip the current route if editing
+        if (editId && route.id === editId) continue;
+
+        if (route.crew && Array.isArray(route.crew)) {
+          for (const routeCrewMember of route.crew) {
+            for (const newCrewMember of newCrewMembers) {
+              if (routeCrewMember === newCrewMember) {
+                assignedCrewMembers.push({
+                  name: newCrewMember,
+                  route: route.route,
+                  driver: route.driver,
+                });
+              }
+            }
+          }
+        }
+      }
+
+      // If crew members are already assigned, show error
+      if (assignedCrewMembers.length > 0) {
+        const crewList = assignedCrewMembers
+          .map((c) => `${c.name} (Route ${c.route})`)
+          .join("");
+        setSnackbar({
+          open: true,
+          message: `Crew already assigned: ${crewList}`,
+          severity: "error",
+        });
+        return;
+      }
+
       // Always ensure coordinates is an array
       let coords = Array.isArray(form.coordinates) ? form.coordinates : [];
       // If only one coordinate, duplicate it
       if (coords.length === 1) {
         coords = [coords[0], coords[0]];
       }
-      const formWithCoords = { ...form, coordinates: coords };
+      // Clean crew and areas to remove empty/whitespace-only entries
+      const cleanedCrew = (Array.isArray(form.crew) ? form.crew : [])
+        .map((c) => (typeof c === "string" ? c.trim() : c))
+        .filter((c) => (typeof c === "string" ? c.length > 0 : !!c));
+      const cleanedAreas = (Array.isArray(form.areas) ? form.areas : [])
+        .map((a) => (typeof a === "string" ? a.trim() : a))
+        .filter((a) => (typeof a === "string" ? a.length > 0 : !!a));
+
+      const formWithCoords = { ...form, crew: cleanedCrew, areas: cleanedAreas, coordinates: coords };
       if (editId) {
         await updateDoc(doc(db, "routes", editId), formWithCoords);
-        setSnackbar({ open: true, message: "Route updated!", severity: "success" });
+        setSnackbar({
+          open: true,
+          message: "Route updated!",
+          severity: "success",
+        });
       } else {
         // Assign a color based on route number or random if not available
         let color = ROUTE_COLORS[parseInt(form.route, 10) - 1];
@@ -274,166 +498,134 @@ const Schedule = () => {
       }
       closeModal();
     } catch (err) {
-      setSnackbar({ open: true, message: "Error saving route", severity: "error" });
+      setSnackbar({
+        open: true,
+        message: "Error saving route",
+        severity: "error",
+      });
     }
   };
-
-  // Delete
-  const handleDelete = async () => {
-    try {
-      await deleteDoc(doc(db, "routes", deleteId));
-      setSnackbar({ open: true, message: "Route deleted!", severity: "success" });
-      setDeleteDialogOpen(false);
-      setDeleteId(null);
-    } catch (err) {
-      setSnackbar({ open: true, message: "Error deleting route", severity: "error" });
-    }
-  };
-
-  // Helper: get days in month
-  const getDaysInMonth = (month, year) => {
-    const firstDay = dayjs(`${year}-${month + 1}-01`);
-    const daysInMonth = firstDay.daysInMonth();
-    const startDay = (firstDay.day() + 6) % 7; // Monday as first day
-    const days = [];
-    let dayNum = 1;
-    for (let i = 0; i < 6; i++) {
-      const week = [];
-      for (let j = 0; j < 7; j++) {
-        if ((i === 0 && j < startDay) || dayNum > daysInMonth) {
-          week.push(null);
-        } else {
-          week.push(dayjs(`${year}-${month + 1}-${dayNum}`));
-          dayNum++;
-        }
-      }
-      days.push(week);
-      if (dayNum > daysInMonth) break;
-    }
-    return days;
-  };
-
-  // Helper: get days in week (for weekly view)
-  const getDaysInWeek = (date) => {
-    const startOfWeek = dayjs(date).startOf('week').add(1, 'day');
-    return Array.from({ length: 7 }, (_, i) => startOfWeek.add(i, 'day'));
-  };
-
-  // Navigation handlers
-  const handlePrev = () => {
-    if (viewMode === 'monthly') {
-      if (currentMonth === 0) {
-        setCurrentMonth(11);
-        setCurrentYear(y => y - 1);
-      } else {
-        setCurrentMonth(m => m - 1);
-      }
-    } else {
-      setSelectedDate(d => dayjs(d).subtract(1, 'week'));
-    }
-  };
-  const handleNext = () => {
-    if (viewMode === 'monthly') {
-      if (currentMonth === 11) {
-        setCurrentMonth(0);
-        setCurrentYear(y => y + 1);
-      } else {
-        setCurrentMonth(m => m + 1);
-      }
-    } else {
-      setSelectedDate(d => dayjs(d).add(1, 'week'));
-    }
-  };
-  const handleViewChange = (e) => {
-    setViewMode(e.target.value === 'Weekly View' ? 'weekly' : 'monthly');
-    if (e.target.value === 'Weekly View') {
-      setSelectedDate(dayjs(`${currentYear}-${currentMonth + 1}-01`));
-    }
-  };
-
-  // Get calendar days
-  const calendarWeeks = viewMode === 'monthly'
-    ? getDaysInMonth(currentMonth, currentYear)
-    : [getDaysInWeek(selectedDate || dayjs(`${currentYear}-${currentMonth + 1}-01`))];
-
-  // Get schedules for a day
-  const getSchedulesForDay = (date) => {
-    if (!date) return [];
-    return routes.filter(r => dayjs(r.date).isSame(date, 'day'));
-  };
-
-  // Add schedule from cell
-  const handleAddScheduleFromCell = (date) => {
-    setSelectedDate(date);
-    setForm({ ...emptyRoute, date: date.format('YYYY-MM-DD') });
-    setEditId(null);
-    setModalOpen(true);
-  };
-
-  // Edit schedule from cell
-  const handleEditSchedule = (route) => {
-    setForm({ ...route, crew: [...route.crew], areas: [...route.areas] });
-    setEditId(route.id);
-    setModalOpen(true);
-  };
-
-  // View info handler
-  const handleViewInfo = (route) => {
-    setInfoRoute(route);
-    setInfoModalOpen(true);
-  };
-
-  // UI
-  const selected = routes.find((r) => r.id === selectedRoute);
 
   return (
     <div className="schedule-container">
-      <div className="schedule-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 40px' }}>
+      <div
+        className="schedule-header"
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          padding: "20px 40px",
+        }}
+      >
         <div></div>
         <Button
           variant="contained"
           onClick={openAddModal}
-          style={{ background: '#336A29', color: '#fff', borderRadius: 20, fontWeight: 600, fontSize: '1.1rem', padding: '10px 32px' }}
+          style={{
+            background: "#336A29",
+            color: "#fff",
+            borderRadius: 20,
+            fontWeight: 600,
+            fontSize: "1.1rem",
+            padding: "10px 32px",
+          }}
         >
           Add Schedule
         </Button>
       </div>
       {/* Schedules Table */}
-      <div style={{ padding: '0 40px 40px 40px' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', background: '#fff', borderRadius: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+      <div style={{ padding: "0 40px 40px 40px" }}>
+        <table
+          style={{
+            width: "100%",
+            borderCollapse: "collapse",
+            background: "#fff",
+            borderRadius: 12,
+            boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
+          }}
+        >
           <thead>
-            <tr style={{ background: '#f7f7d9' }}>
-              <th style={{ padding: 12, borderBottom: '2px solid #e0e0e0' }}>Route</th>
-              <th style={{ padding: 12, borderBottom: '2px solid #e0e0e0' }}>Driver</th>
-              <th style={{ padding: 12, borderBottom: '2px solid #e0e0e0' }}>Crew</th>
-              <th style={{ padding: 12, borderBottom: '2px solid #e0e0e0' }}>Barangays</th>
-              <th style={{ padding: 12, borderBottom: '2px solid #e0e0e0' }}>Time</th>
-              <th style={{ padding: 12, borderBottom: '2px solid #e0e0e0' }}>Kind of Garbage</th>
-              <th style={{ padding: 12, borderBottom: '2px solid #e0e0e0' }}>Frequency</th>
-              <th style={{ padding: 12, borderBottom: '2px solid #e0e0e0' }}>Day Off</th>
-              <th style={{ padding: 12, borderBottom: '2px solid #e0e0e0' }}></th>
+            <tr style={{ background: "#f7f7d9" }}>
+              <th style={{ padding: 12, borderBottom: "2px solid #e0e0e0" }}>
+                Route
+              </th>
+              <th style={{ padding: 12, borderBottom: "2px solid #e0e0e0" }}>
+                Driver
+              </th>
+              <th style={{ padding: 12, borderBottom: "2px solid #e0e0e0" }}>
+                Crew
+              </th>
+              <th style={{ padding: 12, borderBottom: "2px solid #e0e0e0" }}>
+                Barangays
+              </th>
+              <th style={{ padding: 12, borderBottom: "2px solid #e0e0e0" }}>
+                Time
+              </th>
+              <th style={{ padding: 12, borderBottom: "2px solid #e0e0e0" }}>
+                Kind of Garbage
+              </th>
+              <th style={{ padding: 12, borderBottom: "2px solid #e0e0e0" }}>
+                Frequency
+              </th>
+              <th style={{ padding: 12, borderBottom: "2px solid #e0e0e0" }}>
+                Day Off
+              </th>
+              <th
+                style={{ padding: 12, borderBottom: "2px solid #e0e0e0" }}
+              ></th>
             </tr>
           </thead>
           <tbody>
             {routes.map((route) => (
-              <tr key={route.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
+              <tr key={route.id} style={{ borderBottom: "1px solid #f0f0f0" }}>
                 <td style={{ padding: 10 }}>{route.route}</td>
                 <td style={{ padding: 10 }}>{route.driver}</td>
-                <td style={{ padding: 10 }}>{route.crew && route.crew.filter(Boolean).map(member =>
-                  typeof member === "string"
-                    ? member
-                    : [member.firstName, member.lastName].filter(Boolean).join(" ")
-                ).join(' • ')}</td>
-                <td style={{ padding: 10 }}>{route.areas && route.areas.filter(Boolean).join(' • ')}</td>
-                <td style={{ padding: 10 }}>{formatTime12h(route.time)}{route.endTime ? ` - ${formatTime12h(route.endTime)}` : ''}</td>
-                <td style={{ padding: 10 }}>{route.type}</td>
+                <td style={{ padding: 10 }}>
+                  {route.crew &&
+                    route.crew
+                      .filter(Boolean)
+                      .map((member) =>
+                        typeof member === "string"
+                          ? member
+                          : [member.firstName, member.lastName]
+                              .filter(Boolean)
+                              .join(" ")
+                      )
+                      .join(" • ")}
+                </td>
+                <td style={{ padding: 10 }}>
+                  {route.areas && route.areas.filter(Boolean).join(" • ")}
+                </td>
+                <td style={{ padding: 10, whiteSpace: "nowrap" }}>
+                  {formatTime12h(route.time)}
+                  {route.endTime ? ` - ${formatTime12h(route.endTime)}` : ""}
+                </td>
+                <td style={{ padding: 10, paddingLeft: 35 }}>{route.type}</td>
                 <td style={{ padding: 10 }}>{route.frequency}</td>
                 <td style={{ padding: 10 }}>{route.dayOff}</td>
                 <td style={{ padding: 10 }}>
                   <Button
                     variant="outlined"
                     size="small"
-                    style={{ color: '#336A29', borderColor: '#336A29', fontWeight: 600 }}
+                    style={{
+                      color: "#4B8B3B",
+                      borderColor: "#4B8B3B",
+                      fontWeight: 600,
+                      transition: "all 0.2s ease",
+                      "&:hover": {
+                        backgroundColor: "#4B8B3B",
+                        color: "#fff",
+                        borderColor: "#4B8B3B",
+                      },
+                    }}
+                    onMouseEnter={(e) => {
+                      e.target.style.backgroundColor = "#4B8B3B";
+                      e.target.style.color = "#fff";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.style.backgroundColor = "transparent";
+                      e.target.style.color = "#4B8B3B";
+                    }}
                     onClick={() => openEditModal(route)}
                   >
                     Edit
@@ -445,12 +637,25 @@ const Schedule = () => {
         </table>
       </div>
       <Dialog open={modalOpen} onClose={closeModal}>
-        <DialogTitle sx={{ m: 0, p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          {editId ? 'Edit Route' : 'Add New Route'}
+        <DialogTitle
+          sx={{
+            m: 0,
+            p: 2,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          {editId ? "Edit Route" : "Add New Route"}
           <IconButton
             aria-label="close"
             onClick={closeModal}
-            sx={{ position: 'absolute', right: 8, top: 8, color: (theme) => theme.palette.grey[500] }}
+            sx={{
+              position: "absolute",
+              right: 8,
+              top: 8,
+              color: (theme) => theme.palette.grey[500],
+            }}
           >
             <Close />
           </IconButton>
@@ -466,10 +671,16 @@ const Schedule = () => {
               error={!!formErrors.route}
             >
               {ROUTE_NUMBERS.map((num) => (
-                <MenuItem key={num} value={num}>{num}</MenuItem>
+                <MenuItem key={num} value={num}>
+                  {num}
+                </MenuItem>
               ))}
             </Select>
-            {formErrors.route && <Typography color="error" variant="caption">{formErrors.route}</Typography>}
+            {formErrors.route && (
+              <Typography color="error" variant="caption">
+                {formErrors.route}
+              </Typography>
+            )}
           </FormControl>
           <FormControl fullWidth margin="dense" variant="outlined">
             <InputLabel>Driver</InputLabel>
@@ -479,12 +690,32 @@ const Schedule = () => {
               value={form.driver}
               onChange={handleFormChange}
               error={!!formErrors.driver}
+              input={<OutlinedInput label="Driver" />}
+              renderValue={(selected) => (
+                <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                  {selected ? (
+                    <Chip
+                      key={selected}
+                      label={selected}
+                      size="small"
+                      onDelete={() => setForm((prev) => ({ ...prev, driver: "" }))}
+                    />
+                  ) : null}
+                </Box>
+              )}
             >
-              {allDrivers.map((driver) => (
-                <MenuItem key={driver} value={driver}>{driver}</MenuItem>
+              {Array.from(new Set([...(allDrivers || []), ...(form.driver ? [form.driver] : [])]))
+                .map((driver) => (
+                <MenuItem key={driver} value={driver}>
+                  {driver}
+                </MenuItem>
               ))}
             </Select>
-            {formErrors.driver && <Typography color="error" variant="caption">{formErrors.driver}</Typography>}
+            {formErrors.driver && (
+              <Typography color="error" variant="caption">
+                {formErrors.driver}
+              </Typography>
+            )}
           </FormControl>
           <FormControl fullWidth margin="dense" variant="outlined">
             <InputLabel>Crew Members</InputLabel>
@@ -493,30 +724,95 @@ const Schedule = () => {
               name="crew"
               multiple
               value={form.crew}
-              onChange={(e) => setForm((prev) => ({ ...prev, crew: e.target.value }))}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, crew: e.target.value }))
+              }
               input={<OutlinedInput label="Crew Members" />}
-              renderValue={(selected) => selected.join(', ')}
+              renderValue={(selected) => (
+                <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                  {selected.length > 0
+                    ? selected.map((value) => (
+                        <Chip
+                          key={value}
+                          label={value}
+                          size="small"
+                          onDelete={() =>
+                            setForm((prev) => ({
+                              ...prev,
+                              crew: (prev.crew || []).filter((c) => c !== value),
+                            }))
+                          }
+                        />
+                      ))
+                    : null}
+                </Box>
+              )}
             >
-              {allCrew.map((crew) => (
+              {Array.from(new Set([...(allCrew || []), ...((form.crew || []).filter(Boolean))]))
+                .map((crew) => (
                 <MenuItem key={crew} value={crew}>
                   <Checkbox checked={form.crew.indexOf(crew) > -1} />
                   {crew}
                 </MenuItem>
               ))}
             </Select>
-            {formErrors.crew && <Typography color="error" variant="caption">{formErrors.crew}</Typography>}
+            {formErrors.crew && (
+              <Typography color="error" variant="caption">
+                {formErrors.crew}
+              </Typography>
+            )}
           </FormControl>
           <FormControl fullWidth margin="dense" variant="outlined">
-            <InputLabel>Areas</InputLabel>
+            <InputLabel>Barangays</InputLabel>
             <Select
-              label="Areas"
+              label="Barangays"
               name="areas"
               multiple
               value={form.areas}
-              onChange={(e) => setForm((prev) => ({ ...prev, areas: e.target.value }))}
-              input={<OutlinedInput label="Areas" />}
-              renderValue={(selected) => selected.join(', ')}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, areas: e.target.value }))
+              }
+              input={<OutlinedInput label="Barangays" />}
+              renderValue={(selected) => (
+                <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                  {selected.length > 0
+                    ? selected.map((value) => (
+                        <Chip key={value} label={value} size="small" />
+                      ))
+                    : null}
+                </Box>
+              )}
+              MenuProps={{
+                PaperProps: {
+                  style: {
+                    maxHeight: 300,
+                  },
+                },
+              }}
             >
+              <MenuItem
+                sx={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  borderBottom: "1px solid #e0e0e0",
+                  backgroundColor: "#f5f5f5",
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <IconButton
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    // Close the dropdown by blurring the select
+                    const selectElement = e.target.closest(".MuiSelect-select");
+                    if (selectElement) {
+                      selectElement.blur();
+                    }
+                  }}
+                  sx={{ color: "#666" }}
+                ></IconButton>
+              </MenuItem>
               {AREAS.map((area) => (
                 <MenuItem key={area} value={area}>
                   <Checkbox checked={form.areas.indexOf(area) > -1} />
@@ -524,7 +820,11 @@ const Schedule = () => {
                 </MenuItem>
               ))}
             </Select>
-            {formErrors.areas && <Typography color="error" variant="caption">{formErrors.areas}</Typography>}
+            {formErrors.areas && (
+              <Typography color="error" variant="caption">
+                {formErrors.areas}
+              </Typography>
+            )}
           </FormControl>
           <TextField
             margin="dense"
@@ -549,6 +849,7 @@ const Schedule = () => {
             onChange={handleFormChange}
             error={!!formErrors.endTime}
             helperText={formErrors.endTime}
+            inputProps={{ min: getMinEndTime(form.time) }}
           />
           <FormControl fullWidth margin="dense" variant="outlined">
             <InputLabel>Waste Type</InputLabel>
@@ -560,10 +861,16 @@ const Schedule = () => {
               error={!!formErrors.type}
             >
               {WASTE_TYPES.map((type) => (
-                <MenuItem key={type} value={type}>{type}</MenuItem>
+                <MenuItem key={type} value={type}>
+                  {type}
+                </MenuItem>
               ))}
             </Select>
-            {formErrors.type && <Typography color="error" variant="caption">{formErrors.type}</Typography>}
+            {formErrors.type && (
+              <Typography color="error" variant="caption">
+                {formErrors.type}
+              </Typography>
+            )}
           </FormControl>
           <FormControl fullWidth margin="dense" variant="outlined">
             <InputLabel>Frequency</InputLabel>
@@ -575,10 +882,16 @@ const Schedule = () => {
               error={!!formErrors.frequency}
             >
               {FREQUENCIES.map((freq) => (
-                <MenuItem key={freq} value={freq}>{freq}</MenuItem>
+                <MenuItem key={freq} value={freq}>
+                  {freq}
+                </MenuItem>
               ))}
             </Select>
-            {formErrors.frequency && <Typography color="error" variant="caption">{formErrors.frequency}</Typography>}
+            {formErrors.frequency && (
+              <Typography color="error" variant="caption">
+                {formErrors.frequency}
+              </Typography>
+            )}
           </FormControl>
           <FormControl fullWidth margin="dense" variant="outlined">
             <InputLabel>Day Off</InputLabel>
@@ -590,80 +903,117 @@ const Schedule = () => {
               error={!!formErrors.dayOff}
             >
               {DAYS_OFF.map((day) => (
-                <MenuItem key={day} value={day}>{day}</MenuItem>
+                <MenuItem key={day} value={day}>
+                  {day}
+                </MenuItem>
               ))}
             </Select>
-            {formErrors.dayOff && <Typography color="error" variant="caption">{formErrors.dayOff}</Typography>}
+            {formErrors.dayOff && (
+              <Typography color="error" variant="caption">
+                {formErrors.dayOff}
+              </Typography>
+            )}
           </FormControl>
-          {form.coordinates && form.coordinates.length > 0 && form.coordinates.map((coord, idx) => (
-            <Box key={idx} sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 1 }}>
-              <TextField
-                label="Latitude"
-                type="number"
-                value={coord.latitude !== undefined ? coord.latitude : (Array.isArray(coord) ? coord[0] : '')}
-                onChange={e => {
-                  const val = parseFloat(e.target.value);
-                  setForm(prev => {
-                    const coords = [...(prev.coordinates || [])];
-                    if (typeof coords[idx] === 'object' && coords[idx] !== null && coords[idx].latitude !== undefined) {
-                      coords[idx] = { ...coords[idx], latitude: val };
-                    } else if (Array.isArray(coords[idx])) {
-                      coords[idx] = [val, coords[idx][1]];
-                    } else {
-                      coords[idx] = [val, ''];
-                    }
-                    return { ...prev, coordinates: coords };
-                  });
-                }}
-                size="small"
-                sx={{ width: 120 }}
-              />
-              <TextField
-                label="Longitude"
-                type="number"
-                value={coord.longitude !== undefined ? coord.longitude : (Array.isArray(coord) ? coord[1] : '')}
-                onChange={e => {
-                  const val = parseFloat(e.target.value);
-                  setForm(prev => {
-                    const coords = [...(prev.coordinates || [])];
-                    if (typeof coords[idx] === 'object' && coords[idx] !== null && coords[idx].longitude !== undefined) {
-                      coords[idx] = { ...coords[idx], longitude: val };
-                    } else if (Array.isArray(coords[idx])) {
-                      coords[idx] = [coords[idx][0], val];
-                    } else {
-                      coords[idx] = ['', val];
-                    }
-                    return { ...prev, coordinates: coords };
-                  });
-                }}
-                size="small"
-                sx={{ width: 120 }}
-              />
-              {form.coordinates.length > 1 && (
-                <Button
-                  onClick={() => {
-                    setForm(prev => {
+          {form.coordinates &&
+            form.coordinates.length > 0 &&
+            form.coordinates.map((coord, idx) => (
+              <Box
+                key={idx}
+                sx={{ display: "flex", gap: 1, alignItems: "center", mb: 1 }}
+              >
+                <TextField
+                  label="Latitude"
+                  type="number"
+                  value={
+                    coord.latitude !== undefined
+                      ? coord.latitude
+                      : Array.isArray(coord)
+                      ? coord[0]
+                      : ""
+                  }
+                  onChange={(e) => {
+                    const val = parseFloat(e.target.value);
+                    setForm((prev) => {
                       const coords = [...(prev.coordinates || [])];
-                      coords.splice(idx, 1);
+                      if (
+                        typeof coords[idx] === "object" &&
+                        coords[idx] !== null &&
+                        coords[idx].latitude !== undefined
+                      ) {
+                        coords[idx] = { ...coords[idx], latitude: val };
+                      } else if (Array.isArray(coords[idx])) {
+                        coords[idx] = [val, coords[idx][1]];
+                      } else {
+                        coords[idx] = [val, ""];
+                      }
                       return { ...prev, coordinates: coords };
                     });
                   }}
-                  color="error"
                   size="small"
-                  sx={{ minWidth: 0, px: 1 }}
-                >
-                  Remove
-                </Button>
-              )}
-            </Box>
-          ))}
+                  sx={{ width: 120 }}
+                />
+                <TextField
+                  label="Longitude"
+                  type="number"
+                  value={
+                    coord.longitude !== undefined
+                      ? coord.longitude
+                      : Array.isArray(coord)
+                      ? coord[1]
+                      : ""
+                  }
+                  onChange={(e) => {
+                    const val = parseFloat(e.target.value);
+                    setForm((prev) => {
+                      const coords = [...(prev.coordinates || [])];
+                      if (
+                        typeof coords[idx] === "object" &&
+                        coords[idx] !== null &&
+                        coords[idx].longitude !== undefined
+                      ) {
+                        coords[idx] = { ...coords[idx], longitude: val };
+                      } else if (Array.isArray(coords[idx])) {
+                        coords[idx] = [coords[idx][0], val];
+                      } else {
+                        coords[idx] = ["", val];
+                      }
+                      return { ...prev, coordinates: coords };
+                    });
+                  }}
+                  size="small"
+                  sx={{ width: 120 }}
+                />
+                {form.coordinates.length > 1 && (
+                  <Button
+                    onClick={() => {
+                      setForm((prev) => {
+                        const coords = [...(prev.coordinates || [])];
+                        coords.splice(idx, 1);
+                        return { ...prev, coordinates: coords };
+                      });
+                    }}
+                    color="error"
+                    size="small"
+                    sx={{ minWidth: 0, px: 1 }}
+                  >
+                    Remove
+                  </Button>
+                )}
+              </Box>
+            ))}
         </DialogContent>
         <DialogActions>
           <Button onClick={closeModal} color="primary">
             Cancel
           </Button>
           <Button onClick={handleSubmit} color="primary" variant="contained">
-            {loading ? <CircularProgress size={24} /> : editId ? 'Update' : 'Add'}
+            {loading ? (
+              <CircularProgress size={24} />
+            ) : editId ? (
+              "Update"
+            ) : (
+              "Add"
+            )}
           </Button>
         </DialogActions>
       </Dialog>
@@ -671,11 +1021,14 @@ const Schedule = () => {
         <div className="collector-modal-bg">
           <div className="collector-modal">
             <h2>Schedule Added!</h2>
-            <div style={{ textAlign: 'center', margin: '18px 0' }}>
+            <div style={{ textAlign: "center", margin: "18px 0" }}>
               The schedule has been added successfully.
             </div>
-            <div style={{ textAlign: 'center' }}>
-              <button className="primary-btn" onClick={() => setSuccessModalOpen(false)}>
+            <div style={{ textAlign: "center" }}>
+              <button
+                className="primary-btn"
+                onClick={() => setSuccessModalOpen(false)}
+              >
                 OK
               </button>
             </div>
@@ -687,23 +1040,57 @@ const Schedule = () => {
         <DialogContent>
           {infoRoute && (
             <>
-              <Typography><b>Route:</b> {infoRoute.route}</Typography>
-              <Typography><b>Driver:</b> {infoRoute.driver}</Typography>
-              <Typography><b>Crew:</b> {infoRoute.crew && infoRoute.crew.join(', ')}</Typography>
-              <Typography><b>Areas:</b> {infoRoute.areas && infoRoute.areas.join(', ')}</Typography>
-              <Typography><b>Collection Time:</b> {infoRoute.time}</Typography>
-              <Typography><b>Waste Type:</b> {infoRoute.type}</Typography>
-              <Typography><b>Frequency:</b> {infoRoute.frequency}</Typography>
-              <Typography><b>Day Off:</b> {infoRoute.dayOff}</Typography>
+              <Typography>
+                <b>Route:</b> {infoRoute.route}
+              </Typography>
+              <Typography>
+                <b>Driver:</b> {infoRoute.driver}
+              </Typography>
+              <Typography>
+                <b>Crew:</b> {infoRoute.crew && infoRoute.crew.join(", ")}
+              </Typography>
+              <Typography>
+                <b>Areas:</b> {infoRoute.areas && infoRoute.areas.join(", ")}
+              </Typography>
+              <Typography>
+                <b>Collection Time:</b> {infoRoute.time}
+              </Typography>
+              <Typography>
+                <b>Waste Type:</b> {infoRoute.type}
+              </Typography>
+              <Typography>
+                <b>Frequency:</b> {infoRoute.frequency}
+              </Typography>
+              <Typography>
+                <b>Day Off:</b> {infoRoute.dayOff}
+              </Typography>
             </>
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setInfoModalOpen(false)} color="primary">Close</Button>
+          <Button onClick={() => setInfoModalOpen(false)} color="primary">
+            Close
+          </Button>
         </DialogActions>
       </Dialog>
-      <Snackbar open={snackbar.open} autoHideDuration={6000} onClose={() => setSnackbar({ ...snackbar, open: false })}>
-        <Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity} sx={{ width: '100%' }}>
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: "center", horizontal: "center" }}
+        sx={{
+          "& .MuiSnackbar-root": {
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
+          },
+        }}
+      >
+        <Alert
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          severity={snackbar.severity}
+          sx={{ width: "100%" }}
+        >
           {snackbar.message}
         </Alert>
       </Snackbar>
