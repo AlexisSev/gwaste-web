@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { db } from "../firebase";
-import { collection, onSnapshot, doc, getDoc } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
+import { supabase } from "../supabaseClient";
 import "./ViewMap.css";
 
 // Fix for Leaflet icons
@@ -18,8 +19,33 @@ const ViewMap = () => {
   const mapRef = useRef(null);
   const truckMarkersRef = useRef({});
   const driverCacheRef = useRef({}); // Cache driver data by ID
+  const trucksDataRef = useRef({}); // Latest trucks data keyed by id
   const [trucks, setTrucks] = useState([]); // all trucks for list view
   const [selectedTruckId, setSelectedTruckId] = useState(null);
+  const markerAnimationsRef = useRef({});
+  const pollingRef = useRef(null);
+
+  // Deterministic color per truck id
+  const getColorForId = (id) => {
+    const palette = [
+      "#e74c3c", // red
+      "#f39c12", // orange
+      "#27ae60", // green
+      "#2980b9", // blue
+      "#8e44ad", // purple
+      "#16a085", // teal
+      "#d35400", // dark orange
+      "#2c3e50", // navy
+      "#c0392b", // dark red
+      "#7f8c8d", // gray
+    ];
+    const s = String(id);
+    let hash = 0;
+    for (let i = 0; i < s.length; i += 1) {
+      hash = (hash * 31 + s.charCodeAt(i)) >>> 0;
+    }
+    return palette[hash % palette.length];
+  };
 
   useEffect(() => {
     initializeMap();
@@ -28,121 +54,175 @@ const ViewMap = () => {
   useEffect(() => {
     if (!map) return;
 
-    // Subscribe to Firestore "locations"
-    const locationsRef = collection(db, "locations");
-    const unsubscribe = onSnapshot(locationsRef, async (snapshot) => {
-      for (const change of snapshot.docChanges()) {
-        const data = change.doc.data();
-        const id = data.collector_id;
+    const upsertMarker = async (row) => {
+      const id = row.collector_id || row.truck_id || row.id;
+      const latitude = row.latitude ?? row.lat;
+      const longitude = row.longitude ?? row.lng;
+      if (latitude == null || longitude == null || id == null) return;
+      const coords = [latitude, longitude];
+      const color = getColorForId(id);
 
-        if (!data.latitude || !data.longitude) continue;
-        const coords = [data.latitude, data.longitude];
-
-        // 🔹 Fetch driver info (from collectors collection)
-        let driverInfo = driverCacheRef.current[id];
-        if (!driverInfo) {
-          try {
-            const driverDoc = await getDoc(doc(db, "collectors", id));
-            if (driverDoc.exists()) {
-              driverInfo = driverDoc.data();
-              driverCacheRef.current[id] = driverInfo;
-            } else {
-              driverInfo = { collector_name: "Unknown Driver" };
-            }
-          } catch {
-            driverInfo = { collector_name: "Unknown Driver" };
-          }
-        }
-
-        if (change.type === "added" || change.type === "modified") {
-          if (truckMarkersRef.current[id]) {
-            // Update existing marker
-            truckMarkersRef.current[id].setLatLng(coords);
+      // Fetch driver info from Firestore if not cached
+      let driverInfo = driverCacheRef.current[id];
+      if (!driverInfo) {
+        try {
+          const driverDoc = await getDoc(doc(db, "collectors", String(id)));
+          if (driverDoc.exists()) {
+            driverInfo = driverDoc.data();
+            driverCacheRef.current[id] = driverInfo;
           } else {
-            // Create truck marker
-            const truckIcon = L.divIcon({
-              className: "truck-marker",
-              html: `<div style="
-                width: 32px; 
-                height: 32px; 
-                background-color: #007bff; 
-                border-radius: 8px; 
-                display: flex; 
-                align-items: center; 
-                justify-content: center; 
-                font-size: 18px;
-              ">🚛</div>`,
-              iconSize: [32, 32],
-              iconAnchor: [16, 16],
-            });
-
-            const marker = L.marker(coords, { icon: truckIcon }).addTo(map);
-
-            const popupHtml = `
-              <div style="text-align:center;min-width:160px">
-                ${
-                  driverInfo.profile_image
-                    ? `<img src="${driverInfo.profile_image}" alt="Driver" style="width:48px;height:48px;border-radius:50%;margin-bottom:6px"/>`
-                    : "🚛"
-                }
-                <h4 style="margin:4px 0">${driverInfo.collector_name || "Driver"}</h4>
-                <p style="margin:0;font-size:13px"><b>Lat:</b> ${data.latitude.toFixed(
-                  5
-                )}, <b>Lng:</b> ${data.longitude.toFixed(5)}</p>
-                <p style="margin:0;font-size:12px;color:#666">Last update: ${new Date(
-                  data.updated_at
-                ).toLocaleTimeString()}</p>
-              </div>
-            `;
-
-            marker.bindPopup(popupHtml);
-            truckMarkersRef.current[id] = marker;
-          }
-        }
-
-        if (change.type === "removed") {
-          if (truckMarkersRef.current[id]) {
-            map.removeLayer(truckMarkersRef.current[id]);
-            delete truckMarkersRef.current[id];
-          }
-        }
-      }
-
-      // Build trucks list for sidebar
-      const list = [];
-      for (const docSnap of snapshot.docs) {
-        const data = docSnap.data();
-        const id = data.collector_id;
-        if (!data.latitude || !data.longitude) continue;
-
-        let driverInfo = driverCacheRef.current[id];
-        if (!driverInfo) {
-          try {
-            const driverDoc = await getDoc(doc(db, "collectors", id));
-            if (driverDoc.exists()) {
-              driverInfo = driverDoc.data();
-              driverCacheRef.current[id] = driverInfo;
-            } else {
-              driverInfo = { collector_name: "Unknown Driver" };
-            }
-          } catch {
             driverInfo = { collector_name: "Unknown Driver" };
           }
+        } catch {
+          driverInfo = { collector_name: "Unknown Driver" };
         }
-
-        list.push({
-          id,
-          latitude: data.latitude,
-          longitude: data.longitude,
-          updatedAt: data.updated_at,
-          driverName: driverInfo.collector_name || driverInfo.driver || "Driver",
-          profileImage: driverInfo.profile_image || null,
-        });
       }
-      setTrucks(list);
-    });
 
-    return () => unsubscribe();
+      // Update or create marker
+      if (truckMarkersRef.current[id]) {
+        const marker = truckMarkersRef.current[id];
+        // Ensure icon color is up to date
+        marker.setIcon(
+          L.divIcon({
+            className: "truck-marker",
+            html: `<div style="width:32px;height:32px;background-color:${color};border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;color:#fff;">🚛</div>`,
+            iconSize: [32, 32],
+            iconAnchor: [16, 16],
+          })
+        );
+        const from = marker.getLatLng();
+        const to = L.latLng(coords[0], coords[1]);
+        const durationMs = 600;
+        const startTs = performance.now();
+        if (markerAnimationsRef.current[id]) {
+          cancelAnimationFrame(markerAnimationsRef.current[id]);
+        }
+        const step = (nowTs) => {
+          const t = Math.min(1, (nowTs - startTs) / durationMs);
+          const lat = from.lat + (to.lat - from.lat) * t;
+          const lng = from.lng + (to.lng - from.lng) * t;
+          marker.setLatLng([lat, lng]);
+          if (t < 1) {
+            markerAnimationsRef.current[id] = requestAnimationFrame(step);
+          }
+        };
+        markerAnimationsRef.current[id] = requestAnimationFrame(step);
+        const driverDisplayName = driverInfo.collector_name || driverInfo.driver || (trucksDataRef.current[id] && trucksDataRef.current[id].driverName) || "Driver";
+        const popupHtml = `
+          <div style="text-align:center;min-width:160px">
+            ${
+              driverInfo.profile_image
+                ? `<img src="${driverInfo.profile_image}" alt="${driverDisplayName}" style="width:48px;height:48px;border-radius:50%;margin-bottom:6px"/>`
+                : ""
+            }
+            <h4 style="margin:4px 0">${driverDisplayName}</h4>
+            <p style="margin:0;font-size:13px"><b>Lat:</b> ${Number(latitude).toFixed(5)}, <b>Lng:</b> ${Number(longitude).toFixed(5)}</p>
+            <p style="margin:0;font-size:12px;color:#666">Last update: ${new Date(row.updated_at || row.inserted_at || Date.now()).toLocaleTimeString()}</p>
+          </div>`;
+        marker.setPopupContent(popupHtml);
+      } else {
+        const truckIcon = L.divIcon({
+          className: "truck-marker",
+          html: `<div style="width:32px;height:32px;background-color:${color};border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;color:#fff;">🚛</div>`,
+          iconSize: [32, 32],
+          iconAnchor: [16, 16],
+        });
+        const marker = L.marker(coords, { icon: truckIcon }).addTo(map);
+        const driverDisplayName2 = driverInfo.collector_name || driverInfo.driver || (trucksDataRef.current[id] && trucksDataRef.current[id].driverName) || "Driver";
+        const popupHtml = `
+          <div style="text-align:center;min-width:160px">
+            ${
+              driverInfo.profile_image
+                ? `<img src="${driverInfo.profile_image}" alt="${driverDisplayName2}" style="width:48px;height:48px;border-radius:50%;margin-bottom:6px"/>`
+                : "🚛"
+            }
+            <h4 style="margin:4px 0">${driverDisplayName2}</h4>
+            <p style="margin:0;font-size:13px"><b>Lat:</b> ${Number(latitude).toFixed(5)}, <b>Lng:</b> ${Number(longitude).toFixed(5)}</p>
+            <p style="margin:0;font-size:12px;color:#666">Last update: ${new Date(row.updated_at || row.inserted_at || Date.now()).toLocaleTimeString()}</p>
+          </div>`;
+        marker.bindPopup(popupHtml);
+        truckMarkersRef.current[id] = marker;
+      }
+
+      // Update list data
+      trucksDataRef.current[id] = {
+        id,
+        latitude: Number(latitude),
+        longitude: Number(longitude),
+        updatedAt: row.updated_at || row.inserted_at || new Date().toISOString(),
+        driverName: driverInfo.collector_name || driverInfo.driver || "Driver",
+        profileImage: driverInfo.profile_image || null,
+        color,
+      };
+      setTrucks(Object.values(trucksDataRef.current));
+    };
+
+    const removeMarker = (row) => {
+      const id = row.collector_id || row.truck_id || row.id;
+      if (!id) return;
+      if (truckMarkersRef.current[id]) {
+        map.removeLayer(truckMarkersRef.current[id]);
+        delete truckMarkersRef.current[id];
+      }
+      delete trucksDataRef.current[id];
+      setTrucks(Object.values(trucksDataRef.current));
+    };
+
+    // Initial fetch from Supabase
+    (async () => {
+      const { data, error } = await supabase
+        .from("locations")
+        .select("*")
+        .order("updated_at", { ascending: false });
+      if (!error && Array.isArray(data)) {
+        for (const row of data) {
+          // Only show active if field exists
+          if (row.status && String(row.status).toLowerCase() !== "active") continue;
+          await upsertMarker(row);
+        }
+      }
+    })();
+
+    // Realtime subscription
+    const channel = supabase
+      .channel("realtime:locations")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "locations" },
+        async (payload) => {
+          if (payload.eventType === "DELETE") {
+            removeMarker(payload.old || {});
+          } else {
+            await upsertMarker(payload.new || {});
+          }
+        }
+      )
+      .subscribe();
+
+    // Polling fallback to keep updates smooth even if realtime is unavailable
+    if (!pollingRef.current) {
+      pollingRef.current = setInterval(async () => {
+        const { data } = await supabase
+          .from("locations")
+          .select("*")
+          .order("updated_at", { ascending: false })
+          .limit(200);
+        if (Array.isArray(data)) {
+          for (const row of data) {
+            if (row.status && String(row.status).toLowerCase() !== "active") continue;
+            await upsertMarker(row);
+          }
+        }
+      }, 4000);
+    }
+
+    return () => {
+      supabase.removeChannel(channel);
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
   }, [map]);
 
   const initializeMap = () => {
@@ -179,7 +259,7 @@ const ViewMap = () => {
               }}
               style={{ cursor: 'pointer' }}
             >
-              <div className="legend-color" style={{ background: '#28a745' }}></div>
+              <div className="legend-color" style={{ background: t.color || '#28a745' }}></div>
               <span className="truck-name">{t.driverName}</span>
             </div>
           ))}
