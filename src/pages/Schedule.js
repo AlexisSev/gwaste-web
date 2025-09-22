@@ -51,7 +51,6 @@ const ROUTE_NUMBERS = ["1", "2", "3", "4", "5", "6"];
 // Predefined schedules by route for autofill when adding a new schedule
 const ROUTE_PRESETS = {
   "1": {
-    driver: "Mario Alagase",
     crew: [
       "Agostine Estrera Jr",
       "Roberto Del Carmen",
@@ -65,7 +64,6 @@ const ROUTE_PRESETS = {
     dayOff: "Sunday",
   },
   "2": {
-    driver: "Rey Owatan",
     crew: [
       "Ricky Francisco",
       "Rex Desuyo",
@@ -86,7 +84,6 @@ const ROUTE_PRESETS = {
     dayOff: "Sunday",
   },
   "3": {
-    driver: "Vicente Subingsubing",
     crew: [
       "Noli Dahunan",
       "Anthony Remulta",
@@ -105,7 +102,6 @@ const ROUTE_PRESETS = {
     dayOff: "Sunday",
   },
   "4": {
-    driver: "Ricardo Olivar",
     crew: [
       "Joel Ursal Sr",
       "Radne Bedrijo",
@@ -126,7 +122,6 @@ const ROUTE_PRESETS = {
     dayOff: "Saturday",
   },
   "5": {
-    driver: "Belmar Alagase",
     crew: [
       "Winful Catampatan",
       "Orgie Menoria",
@@ -147,7 +142,6 @@ const ROUTE_PRESETS = {
     dayOff: "Saturday",
   },
   "6": {
-    driver: "Reynaldo Balunan",
     crew: [
       "Arnel Casiano",
       "Marjun Ylanan",
@@ -373,7 +367,6 @@ const Schedule = () => {
         // Only auto-fill when adding a new schedule (not editing)
         if (!editId && ROUTE_PRESETS[value]) {
           const p = ROUTE_PRESETS[value];
-          next.driver = p.driver;
           next.crew = [...p.crew];
           next.areas = [...p.areas];
           next.time = p.time;
@@ -408,6 +401,13 @@ const Schedule = () => {
         return next;
       });
       return;
+    }
+    if (name === "endTime") {
+      // Prevent AM selection when start time is AM
+      if (form.time && isAM(form.time) && isAM(value)) {
+        // Don't update the end time if trying to set AM when start is AM
+        return;
+      }
     }
     setForm((prev) => ({ ...prev, [name]: value }));
   };
@@ -848,8 +848,27 @@ const Schedule = () => {
             value={form.endTime}
             onChange={handleFormChange}
             error={!!formErrors.endTime}
-            helperText={formErrors.endTime}
-            inputProps={{ min: getMinEndTime(form.time) }}
+            helperText={
+              formErrors.endTime || 
+              (form.time && isAM(form.time))
+            }
+            inputProps={{ 
+              min: getMinEndTime(form.time),
+              max: "23:59"
+            }}
+            onFocus={(e) => {
+              // If start time is AM, restrict end time to PM only
+              if (form.time && isAM(form.time)) {
+                e.target.min = "12:00";
+              }
+            }}
+            onInput={(e) => {
+              // Additional validation on input
+              if (form.time && isAM(form.time) && isAM(e.target.value)) {
+                e.target.value = "12:00";
+                handleFormChange(e);
+              }
+            }}
           />
           <FormControl fullWidth margin="dense" variant="outlined">
             <InputLabel>Waste Type</InputLabel>
