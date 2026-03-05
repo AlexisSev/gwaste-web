@@ -21,7 +21,7 @@ This project aims to develop the **G-Waste** system to help residents, operation
 
 ## 🛠️ Tech Stack
 - **Frontend (Mobile):** React Native (Expo) + Leaflet (WebView for Maps)  
-- **Backend:** Supabase (Postgres + Row Level Security) & Firebase (Auth + Firestore)  
+- **Backend:** Supabase (Postgres + Row Level Security)
 - **Storage:** Supabase Storage (for images, reports, and documents)  
 - **AI/ML:** Predictive analysis for waste collection patterns  
 - **Maps & Geolocation:** OpenStreetMap (Leaflet), OSRM (Routing), Expo Location
@@ -35,3 +35,19 @@ This project aims to develop the **G-Waste** system to help residents, operation
 - 🧠 **AI-powered Predictions** – Smarter collection scheduling based on data patterns.  
 - 💬 **Chatbot Support** – Residents can ask for info, get waste management tips, or report issues.  
 - 📸 **Report with Proof** – Residents can upload images when reporting missed pickups or issues.
+
+---
+
+## 👨‍💻 Development Team
+
+Team Leader:
+DaneMhark Lepiten
+
+System Analyst:
+Christian Dave Berenguel
+
+Front-end Developer:
+Kaye Chloe Malait
+
+Back-end Developer:
+Alexis Sevilleno
